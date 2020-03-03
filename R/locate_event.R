@@ -20,7 +20,7 @@ library(stringi)
 library(ngram)
 library(hunspell)
 library(stringdist)
-library(doBy)
+#library(doBy)
 library(tm)
 library(raster)
 library(rgeos)
@@ -284,7 +284,7 @@ tweet_word_start_character <- function(i, tweet_words_loc){
 
 # Algorithm ====================================================================
 counter_to_display <- 1
-locate_crash <- function(tweet,
+locate_event <- function(tweet,
                          crash_words,
                          junction_words,
                          tier_1_prepositions,
@@ -309,13 +309,13 @@ locate_crash <- function(tweet,
   }
   
   # Load Location Files --------------------------------------------------------
-  if(import_files){
-    landmark_gazetteer <- readRDS(file.path(project_file_path, "Twitter Geocode Algorithm", "data", "finaldata", "gazetteers_augmented", "gazetteer_aug.Rds"))
-    roads <- readRDS(file.path(project_file_path, "Twitter Geocode Algorithm", "data", "finaldata", "roads_augmented", "osm_roads_aug.Rds"))
-    neighborhoods <- readRDS(file.path(project_file_path, "Twitter Geocode Algorithm", "data", "finaldata", "nairobi_estates", "nairobi_estates.Rds"))
-  } else{
-    landmark_gazetteer <- landmark_gazetteer_orig
-  }
+  #if(import_files){
+  #  landmark_gazetteer <- readRDS(file.path(project_file_path, "Twitter Geocode Algorithm", "data", "finaldata", "gazetteers_augmented", "gazetteer_aug.Rds"))
+  #  roads <- readRDS(file.path(project_file_path, "Twitter Geocode Algorithm", "data", "finaldata", "roads_augmented", "osm_roads_aug.Rds"))
+  #  neighborhoods <- readRDS(file.path(project_file_path, "Twitter Geocode Algorithm", "data", "finaldata", "nairobi_estates", "nairobi_estates.Rds"))
+  #} else{
+  #  landmark_gazetteer <- landmark_gazetteer_orig
+  #}
 
   # Extra Cleaning
   landmark_gazetteer$name <- landmark_gazetteer$name %>% str_replace_all("[[:punct:]]", "")
@@ -330,6 +330,8 @@ locate_crash <- function(tweet,
   tier_1_prepositions_startendword <- paste0("\\b",tier_1_prepositions,"\\b")
   tier_2_prepositions_startendword <- paste0("\\b",tier_2_prepositions,"\\b")
   tier_3_prepositions_startendword <- paste0("\\b",tier_3_prepositions,"\\b")
+  
+  prepositions_list <- c(tier_1_prepositions, tier_2_prepositions)
   
   # Clean Tweet ------------------------------------------------------------------
   tweet <- iconv(tweet, "latin1", "ASCII", sub="")
@@ -1148,7 +1150,9 @@ locate_crash <- function(tweet,
       if((gDistance(df_out_sp, roads_i) * 111.12) < 0.5){
         df_out_sp_snap <- snapPointsToLines(df_out_sp, 
                                             as(roads_i, "SpatialLinesDataFrame"), 
-                                            maxDist=1, withAttrs = TRUE, idField=NA)
+                                            maxDist=1, withAttrs = F, idField=NA)
+        df_out_sp_snap@data <- df_out_sp@data
+      
         df_out_sp_snap <- as.data.frame(df_out_sp_snap) %>%
           dplyr::rename(lon = X) %>%
           dplyr::rename(lat = Y)
