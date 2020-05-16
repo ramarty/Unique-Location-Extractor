@@ -33,7 +33,7 @@ counter.number <- 1
 # Algorithm Inputs -------------------------------------------------------------
 if(F){
   
-  text <- "crash near airtel on mombasa rd words words words yaya center"
+  text <- "crash near airtel on mombasa rd words words words yaya center kenyatta ave"
   text_i <- text
   
   AUG_GAZ <- T
@@ -79,8 +79,6 @@ if(F){
   
   roads <- readRDS(file.path(algorithm_inputs, "roads_augmented", "osm_roads_aug.Rds"))
   neighborhoods <- readRDS(file.path(algorithm_inputs, "nairobi_estates", "nairobi_estates.Rds"))
-  
-  
   
 }
 
@@ -389,6 +387,103 @@ tweet_word_start_character <- function(i, tweet_words_loc){
   }
 }
 
+#aaa <- map_df(prep_locs, 
+#              extract_locations_after_words,
+#              text_i_no_stopwords,
+#              landmark_gazetteer)
+
+#word_loc = 4
+#text = text_i_no_stopwords
+#landmarks = landmark_gazetteer
+
+extract_locations_after_words <- function(word_loc, 
+                                          text, 
+                                          landmarks){
+  # DESCRIPTION: Searches for location references after words (typically 
+  # prepositions). Allows for partially matchine names.
+  # ARGS:
+  # word_loc: Index of the word (eg, preposition) in the text. For example,
+  #           "accident near garden city", if the word for "word_loc" is "near",
+  #           the index would be 2.
+  # text: Text to search for locations
+  # landmark_gazetteer: Spatial dataframe of landmarks with a "name" variable.
+  
+  ## Default - blank spatial polygons dataframe. Make sure has a variable
+  # that typical output would include
+  landmarks_out <- data.frame(NULL)
+  
+  # 1. Conditions to check for word ------------------------------------------
+  # Check for conditions based on the next word after the propsotion. If one
+  # of the following conditions exists, we don't consider words after the 
+  # preposition
+  next_word <- word(text, word_loc+1)
+  
+  next_word_none <- is.na(next_word)
+  next_word_ignoreword <- next_word %in% c(stopwords::stopwords(language="en"), "exit", "top", "bottom", "scene")
+  next_word_short <- nchar(next_word) < 3
+  
+  if(!next_word_none & !next_word_ignoreword & !next_word_short){
+    
+    # 2. Grab gazeteer words after preposition -------------------------------
+    
+    ## Start with full gazeteer
+    landmarks_subset <- landmarks
+    
+    ## Loop through words after preposition
+    for(i in 1:10){
+      word_i <- word(text, word_loc+i)
+      
+      # If first word after preposition, the gazetteer word must start with that word.
+      # Restrict words in gazetteer, creating a temporary dataframe
+      if(i == 1) landmarks_subset_candidate <- landmarks_subset[grepl(paste0("^", word_i, "\\b"),   landmarks_subset$name), ]
+      if(i > 1)  landmarks_subset_candidate  <- landmarks_subset[grepl(paste0("\\b", word_i, "\\b"), landmarks_subset$name), ]
+      
+      # If the gazeteer still has words after subsetting, replace
+      # gazeteer with gazeteer_temp. If gazeteer doesn't have words left,
+      # break out of loop and use last version of gazeteer with words.
+      if(nrow(landmarks_subset_candidate) > 0){
+        landmarks_subset <- landmarks_subset_candidate
+      } else{
+        break
+      }
+      
+    }
+    
+    # 3. Subset selected words -----------------------------------------------
+    # Keep landmarks with shortest word length. For example, if landmark
+    # with fewest words has 2 words, we only keep landmarks with 2 words
+    min_words <- min(str_count(landmarks_subset$name, "\\S+"))
+    landmarks_subset <- landmarks_subset[str_count(landmarks_subset$name, "\\S+") %in% min_words,]
+    landmarks_subset <- landmarks_subset[!is.na(landmarks_subset$lat),] # if blank, will give one row with NAs
+    
+    # 4. Check for dominant cluster ------------------------------------------
+    landmarks_subset <- extract_dominant_cluster(landmarks_subset)
+    
+    # 5. Format Output -------------------------------------------------------
+    if(nrow(landmarks_subset) >= 1){
+      
+      landmarks_subset@data <- landmarks_subset@data %>%
+        dplyr::rename(matched_words_correct_spelling = name) %>%
+        mutate(exact_match = FALSE,
+               location_type = "landmark")
+      
+      ## Add tweet spelling
+      max_word_length <- landmarks_subset$matched_words_correct_spelling %>% str_count("\\S+") %>% max()
+      
+      landmarks_subset@data <- landmarks_subset@data %>%
+        mutate(matched_words_tweet_spelling = word(text,
+                                                   word_loc + 1,
+                                                   word_loc + max_word_length))
+      
+      landmarks_out <- landmarks_subset@data
+    }
+    
+  }
+  
+  return(landmarks_out)
+  
+}
+
 ##### ******************************************************************** #####
 # ALGORITHM NEW ================================================================
 locate_event <- function(text){
@@ -424,6 +519,11 @@ locate_event <- function(text){
   
   prepositions_list <- c(tier_1_prepositions, tier_2_prepositions)
   prepositions_list_all <- c(tier_1_prepositions, tier_2_prepositions, tier_3_prepositions)
+  
+  ## Add unique ID to gazetteer
+  landmark_gazetteer$uid <- 1:nrow(landmark_gazetteer)
+  roads$uid              <- 1:nrow(roads)
+  neighborhoods$uid      <- 1:nrow(neighborhoods)
   
   # 3. Clean/Prep Text ---------------------------------------------------------
   # Cleans and preps text
@@ -514,7 +614,6 @@ locate_event_i <- function(text_i){
                                                          first_letters_same,
                                                          last_letters_same) 
     
-    
     #### Remove fuzzy match if:
     # (1) Tweet spelling is one word
     # (2) Tweet spelling is correctly spelled
@@ -553,214 +652,130 @@ locate_event_i <- function(text_i){
   neighborhood_match <- neighborhood_match %>% mutate(location_type = "neighborhood")
   
   ## Append
+  # Don't append before as there could be cases where a landmark and road has 
+  # the same name, and appending and making distict would pick one over the
+  # other (?), which we deal with in a separate process.
   locations_in_tweet <- bind_rows(landmark_match, road_match, neighborhood_match)
   
   # 2. Landmarks after prepositions --------------------------------------------
+  
   # When grabbing landmarks after prepositions we ignore stopwords. So for:
   # "accident near the garden city", we ignore "the" 
-  
   text_i_no_stopwords <- text_i %>% str_replace_all("\\bthe\\b", " ") %>% str_squish
   
   ## Create vector of locations in tweets where prepositions occur
-  prepositions_in_tweet <- phrase_in_sentence_exact(text_i_no_stopwords, prepositions_list_all)
+  preps_in_tweet <- phrase_in_sentence_exact(text_i_no_stopwords, prepositions_list_all)
   
-  prepositions_locations <- lapply(as.character(prepositions_in_tweet$matched_words_tweet_spelling), phrase_locate, text_i_no_stopwords) %>% 
+  ## Locations of Prepositions
+  prep_locs_df <- lapply(as.character(preps_in_tweet$matched_words_tweet_spelling), 
+                         phrase_locate, 
+                         text_i_no_stopwords) %>% 
     bind_rows %>%
     filter(!(word_loc_max %in% c(-Inf, Inf))) #TODO Check why getting Inf using `phrase_locate()` function
   
-  prepositions_locations <- prepositions_locations$word_loc_max %>% unique # vector of locations of prepositions in tweet
+  prep_locs <- prep_locs_df$word_loc_max %>% unique # vector of locations of prepositions in tweet
   
+  ## Extract landmarks
+  locations_in_tweet_prep <- map_df(prep_locs, 
+                                    extract_locations_after_words,
+                                    text_i_no_stopwords,
+                                    landmark_gazetteer) 
   
-  #### Extract words after prepositions
-  #locations_in_tweet_prep <- lapply(prepositions_locations, function(prep_loc_i){
-    # For preposition location i
-  
-  # TODO: then could explicitly check for accident... if needed, or at least
-  # could be used which is good
-  # TODO: Wrap this function in another that iterates over it!!!
-  locations_after_words <- function(prep_loc_i){
-  
+  ### Remove if landmark already found
+  if(nrow(locations_in_tweet_prep) > 0){
     
-    landmarks_out <- data.frame(NULL)
+    locations_in_tweet_prep <- locations_in_tweet_prep %>%
+      
+      ## Prep Variables
+      dplyr::select(matched_words_tweet_spelling,
+                    matched_words_correct_spelling) %>%
+      mutate(exact_match = FALSE,
+             location_type = "landmark") %>%
+      
+      ## Remove if landmark already found
+      filter(!(matched_words_tweet_spelling %in% locations_in_tweet$matched_words_tweet_spelling))
     
-    # 1. Conditions to check for word ------------------------------------------
-    # Check for conditions based on the next word after the propsotion. If one
-    # of the following conditions exists, we don't consider words after the 
-    # preposition
-    next_word <- word(text_i_no_stopwords, prep_loc_i+1)
-    
-    next_word_none <- is.na(next_word)
-    next_word_ignoreword <- next_word %in% c(stopwords::stopwords(language="en"), "exit", "top", "bottom", "scene")
-    next_word_short <- nchar(next_word) < 3
-    
-    if(!next_word_none & !next_word_ignoreword & !next_word_short){
-      
-      # 2. Grab gazeteer words after preposition -------------------------------
-      
-      ## Start with full gazeteer
-      landmark_gazetteer_aug_withword <- landmark_gazetteer
-      
-      ## Loop through words after preposition
-      for(i in 1:10){
-        word_i <- word(text_i_no_stopwords, prep_loc_i+i)
-        
-        # If first word after preposition, the gazetteer word must start with that word.
-        # Restrict words in gazetteer, creating a temporary dataframe
-        if(i == 1) landmark_gazetteer_aug_withword_temp <- landmark_gazetteer_aug_withword[grepl(paste0("^", word_i, "\\b"),   landmark_gazetteer_aug_withword$name), ]
-        if(i > 1)  landmark_gazetteer_aug_withword_temp  <- landmark_gazetteer_aug_withword[grepl(paste0("\\b", word_i, "\\b"), landmark_gazetteer_aug_withword$name), ]
-        
-        # If the gazeteer still has words after subsetting, replace
-        # gazeteer with gazeteer_temp. If gazeteer doesn't have words left,
-        # break out of loop and use last version of gazeteer with words.
-        if(nrow(landmark_gazetteer_aug_withword_temp) > 0){
-          landmark_gazetteer_aug_withword <- landmark_gazetteer_aug_withword_temp
-        } else{
-          break
-        }
-        
-      }
-      
-      # 3. Subset selected words -----------------------------------------------
-      # Keep landmarks with shortest word length. For example, if landmark
-      # with fewest words has 2 words, we only keep landmarks with 2 words
-      min_words <- min(str_count(landmark_gazetteer_aug_withword$name, "\\S+"))
-      landmark_gazetteer_aug_withword <- landmark_gazetteer_aug_withword[str_count(landmark_gazetteer_aug_withword$name, "\\S+") %in% min_words,]
-      landmark_gazetteer_aug_withword <- landmark_gazetteer_aug_withword[!is.na(landmark_gazetteer_aug_withword$lat),] # if blank, will give one row with NAs
-      
-      # 4. Check for dominant cluster ------------------------------------------
-      landmarks_close <- extract_dominant_cluster(landmark_gazetteer_aug_withword)
-
-      # 5. Format Output -------------------------------------------------------
-      if(nrow(landmarks_close) >= 1){
-        
-        landmarks_close@data <- landmarks_close@data %>%
-          dplyr::rename(matched_words_correct_spelling = name) %>%
-          mutate(exact_match = FALSE,
-                 location_type = "landmark")
-        
-        ## Add tweet spelling
-        max_word_length <- landmarks_close$matched_words_correct_spelling %>% str_count("\\S+") %>% max()
-        
-        landmarks_close@data <- landmarks_close@data %>%
-          mutate(matched_words_tweet_spelling = word(text_i_no_stopwords,
-                                                     prep_loc_i + 1,
-                                                     prep_loc_i + max_word_length))
-        
-        landmarks_out <- landmarks_close
-      }
-      
-    }
-    
-    return(landmarks_out)
+    ## Add to main locations dataframe
+    locations_in_tweet <- bind_rows(locations_in_tweet, locations_in_tweet_prep)
   }
-
+  
+  # 3. Quick Location Dataset Prep ---------------------------------------------
+  
+  locations_in_tweet <- locations_in_tweet[!(locations_in_tweet$location_type %in% "neighborhood"),]
+  
+  landmark_match <- locations_in_tweet[locations_in_tweet$location_type %in% "landmark",]
+  road_match     <- locations_in_tweet[locations_in_tweet$location_type %in% "road",]
+  
+  road_match_sp <- roads[roads$name %in% road_match$matched_words_correct_spelling,]
+  
+  ## Aggregate roads so one row; makes distance calculations faster
+  road_match_agg_sp <- road_match_sp
+  road_match_agg_sp$id <- 1
+  road_match_agg_sp <- raster::aggregate(road_match_agg_sp, by="id")
+  
+  # 4. Choosing which landmarks to use -----------------------------------------
+  df_out <- data.frame(matrix(nrow=1,ncol=0))
+  
+  if(nrow(locations_in_tweet) > 0){
     
-      
-
-      
-      
-      
-
-          
-
-    # Check if next word is not NA // not at end of sentence
-    if(!is.na(word(tweet_no_stopwords, prep_loc_i+1))){ 
-      
-      # Check if next word is common traffic word 
-      if(!(word(tweet_no_stopwords, prep_loc_i+1) %in% c(stopwords::stopwords(language="en"), "exit", "top", "bottom", "scene"))){
-        
-        # Check if next word is more than three characters long
-        if(nchar(word(tweet_no_stopwords, prep_loc_i+1)) >= 3){
-          
-          
-          
-          landmark_gazetteer_aug_withword <- landmark_gazetteer
-          for(i in 1:10){
-            word_i <- word(tweet_no_stopwords, prep_loc_i+i)
-            
-            if(i == 1) landmark_gazetteer_aug_withword_temp <- landmark_gazetteer_aug_withword[grepl(paste0("^", word_i, "\\b"), landmark_gazetteer_aug_withword$name), ]
-            if(i > 1) landmark_gazetteer_aug_withword_temp <- landmark_gazetteer_aug_withword[grepl(paste0("\\b", word_i, "\\b"), landmark_gazetteer_aug_withword$name), ]
-            
-            if(nrow(landmark_gazetteer_aug_withword_temp) > 0){
-              landmark_gazetteer_aug_withword <- landmark_gazetteer_aug_withword_temp
-            } else{
-              break
-            }
-          }
-          
-          min_words <- min(str_count(landmark_gazetteer_aug_withword$name, "\\S+"))
-          landmark_gazetteer_aug_withword <- landmark_gazetteer_aug_withword[str_count(landmark_gazetteer_aug_withword$name, "\\S+") %in% min_words,]
-          landmark_gazetteer_aug_withword <- landmark_gazetteer_aug_withword[!is.na(landmark_gazetteer_aug_withword$lat),] # if blank, will give one row with NAs
-          
-          if(nrow(landmark_gazetteer_aug_withword) >= 1){
-            
-            max_dist_km <- sqrt((max(landmark_gazetteer_aug_withword$lat) - min(landmark_gazetteer_aug_withword$lat))^2 +
-                                  (max(landmark_gazetteer_aug_withword$lon) - min(landmark_gazetteer_aug_withword$lon))^2) * 111.12
-            
-            
-            if(max_dist_km <= 0.5){
-              #### If all close together
-              
-              locations_in_tweet_prep_i <- landmark_gazetteer_aug_withword$name %>% 
-                unique %>% 
-                as.data.frame %>%
-                dplyr::rename(matched_words_correct_spelling = ".") %>%
-                mutate(matched_words_tweet_spelling = word(tweet_no_stopwords, prep_loc_i+1, prep_loc_i+i-1)) %>%
-                mutate(exact_match = FALSE) %>%
-                mutate(location_type = "landmark")
-            } 
-            
-            if((max_dist_km > 0.5) & nrow(landmark_gazetteer_aug_withword) < 60){
-              
-              #### If not all close together check for dominant cluster
-              
-              # Create distance matrix
-              landmark_gazetteer_aug_withword_sp <- landmark_gazetteer_aug_withword
-              coordinates(landmark_gazetteer_aug_withword_sp) <- ~lon+lat
-              landmark_gazetteer_aug_withword_distances_mat <- gDistance(landmark_gazetteer_aug_withword_sp, byid=T) * 111.12
-              
-              # Check if cluster exists
-              landmark_gazetteer_aug_withword_distances_list <- landmark_gazetteer_aug_withword_distances_mat %>% as.list %>% unlist
-              cluster_exists <- mean(landmark_gazetteer_aug_withword_distances_list <= 0.5) > .9
-              
-              # If cluster exists, extract coordinates of dominant cluster
-              if(cluster_exists){
-                # Extract columns where more than X % are close together
-                landmark_gazetteer_aug_withword_distances_mat_closeTF <- landmark_gazetteer_aug_withword_distances_mat < 0.5
-                in_dominant_cluster <- (colSums(landmark_gazetteer_aug_withword_distances_mat_closeTF) / nrow(landmark_gazetteer_aug_withword_distances_mat_closeTF) >= .9)
-                
-                landmark_gazetteer_aug_withword <- landmark_gazetteer_aug_withword[in_dominant_cluster,]
-                
-                # Resulting dataframe
-                if(nrow(landmark_gazetteer_aug_withword) > 0){ # just in case...
-                  locations_in_tweet_prep_i <- landmark_gazetteer_aug_withword$name %>% 
-                    unique %>% 
-                    as.data.frame %>%
-                    dplyr::rename(matched_words_correct_spelling = ".") %>%
-                    mutate(matched_words_tweet_spelling = word(tweet_no_stopwords, prep_loc_i+1, prep_loc_i+i-1)) %>%
-                    mutate(exact_match = FALSE) %>%
-                    mutate(location_type = "landmark")
-                }
-              }
-            }
-          }
-        }
-      }
-    }
+    # 4.1 Locations of Words in Tweet ------------------------------------------
+    #### Locations 
+    # Add location of words in tweet to locations_in_tweet dataframe
+    word_locations <- lapply(as.character(locations_in_tweet$matched_words_tweet_spelling), phrase_locate, text_i) %>% bind_rows
+    locations_in_tweet <- merge(locations_in_tweet, word_locations, by.x="matched_words_tweet_spelling", by.y="word")
+    #locations_in_tweet_original <- locations_in_tweet
     
-    return(locations_in_tweet_prep_i)
+    ## check this issue??
+    locations_in_tweet <- locations_in_tweet[!(locations_in_tweet$word_loc_min %in% c(Inf,-Inf)),]
+    locations_in_tweet <- locations_in_tweet[!(locations_in_tweet$word_loc_max %in% c(Inf,-Inf)),]
     
-  }) %>% bind_rows
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
+    #### Other word types
+    # Create dataframes indicating locations of (1) crash words and (2) prepositions
+    # in tweets
+    crash_word_locations <- lapply(crash_words, phrase_locate, text_i) %>% bind_rows
+    preposition_word_locations <- lapply(prepositions_list, phrase_locate, text_i) %>% bind_rows
+    
+    # 4.2 Restrict Locations/Landmarks to Consider -----------------------------
+    ## Remove general landmarks
+    rm_gen_out <- remove_general_landmarks(landmark_match,
+                                           landmark_gazetteer,
+                                           road_match_sp)
+    landmark_match     <- rm_gen_out$landmark_match
+    landmark_gazetteer <- rm_gen_out$landmark_gazetteer
+    
+    ## Subset
+    locations_in_tweet <- locations_in_tweet %>%
+      landmark_road_overlap() %>%
+      exact_fuzzy_overlap() %>%
+      phase_overlap() %>%
+      exact_fuzzy_startendsame()
+    
+    # 4.3 Find Intersections ---------------------------------------------------
+    road_inter_points <- extract_intersections(locations_in_tweet, roads)
+    
+    # 4.4 Add Variables to Location Dataframes ---------------------------------
+    # Add variables such as word location relative to prepositions and crash words
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+  }
   
   
   
@@ -772,362 +787,10 @@ locate_event_i <- function(text_i){
 counter_to_display <- 1
 locate_event <- function(tweet){
   
-  # Grab Landmarks After Prepositions ------------------------------------------
-  #### When grabbing landmarks after prepositions we ignore stopwords. So we consider:
-  # "accident near the garden city"
-  tweet_no_stopwords <- tweet %>% str_replace_all("\\bthe\\b", " ") %>% str_squish
-  
-  #### Create vector of locations in tweets where prepositions occur
-  prepositions_in_tweet <- phrase_in_sentence_exact(tweet_no_stopwords, c(tier_1_prepositions, tier_2_prepositions, tier_3_prepositions))
-  prepositions_locations <- lapply(as.character(prepositions_in_tweet$matched_words_tweet_spelling), phrase_locate, tweet_no_stopwords) %>% bind_rows
-  prepositions_locations <- prepositions_locations[!(prepositions_locations$word_loc_max %in% c(-Inf, Inf)),] #TODO Check why getting Inf using `phrase_locate()` function
-  prepositions_locations <- prepositions_locations$word_loc_max %>% unique # vector of locations of prepositions in tweet
-  
-  #### Extract words after prepositions
-  locations_in_tweet_prep <- lapply(prepositions_locations, function(prep_loc_i){
-    
-    locations_in_tweet_prep_i <- data.frame(NULL)
-    
-    # If first word is certain word (eg, stopword), skip / don't use words after this prepositions
-    # Stopwords
-    # Common traffic words (eg, on "exit"), where likely not referencing landmark
-    # Common location words that may come after preposition (top, bottom)
-    # First word must be 3 or more letters long
-    
-    # Check if next word is not NA // not at end of sentence
-    if(!is.na(word(tweet_no_stopwords, prep_loc_i+1))){ 
-      
-      # Check if next word is common traffic word 
-      if(!(word(tweet_no_stopwords, prep_loc_i+1) %in% c(stopwords::stopwords(language="en"), "exit", "top", "bottom", "scene"))){
-        
-        # Check if next word is more than three characters long
-        if(nchar(word(tweet_no_stopwords, prep_loc_i+1)) >= 3){
-          
-          
-          
-          landmark_gazetteer_aug_withword <- landmark_gazetteer
-          for(i in 1:10){
-            word_i <- word(tweet_no_stopwords, prep_loc_i+i)
-            
-            if(i == 1) landmark_gazetteer_aug_withword_temp <- landmark_gazetteer_aug_withword[grepl(paste0("^", word_i, "\\b"), landmark_gazetteer_aug_withword$name), ]
-            if(i > 1) landmark_gazetteer_aug_withword_temp <- landmark_gazetteer_aug_withword[grepl(paste0("\\b", word_i, "\\b"), landmark_gazetteer_aug_withword$name), ]
-            
-            if(nrow(landmark_gazetteer_aug_withword_temp) > 0){
-              landmark_gazetteer_aug_withword <- landmark_gazetteer_aug_withword_temp
-            } else{
-              break
-            }
-          }
-          
-          min_words <- min(str_count(landmark_gazetteer_aug_withword$name, "\\S+"))
-          landmark_gazetteer_aug_withword <- landmark_gazetteer_aug_withword[str_count(landmark_gazetteer_aug_withword$name, "\\S+") %in% min_words,]
-          landmark_gazetteer_aug_withword <- landmark_gazetteer_aug_withword[!is.na(landmark_gazetteer_aug_withword$lat),] # if blank, will give one row with NAs
-          
-          if(nrow(landmark_gazetteer_aug_withword) >= 1){
-            
-            max_dist_km <- sqrt((max(landmark_gazetteer_aug_withword$lat) - min(landmark_gazetteer_aug_withword$lat))^2 +
-                                  (max(landmark_gazetteer_aug_withword$lon) - min(landmark_gazetteer_aug_withword$lon))^2) * 111.12
-            
-            
-            if(max_dist_km <= 0.5){
-              #### If all close together
-              
-              locations_in_tweet_prep_i <- landmark_gazetteer_aug_withword$name %>% 
-                unique %>% 
-                as.data.frame %>%
-                dplyr::rename(matched_words_correct_spelling = ".") %>%
-                mutate(matched_words_tweet_spelling = word(tweet_no_stopwords, prep_loc_i+1, prep_loc_i+i-1)) %>%
-                mutate(exact_match = FALSE) %>%
-                mutate(location_type = "landmark")
-            } 
-            
-            if((max_dist_km > 0.5) & nrow(landmark_gazetteer_aug_withword) < 60){
-              
-              #### If not all close together check for dominant cluster
-              
-              # Create distance matrix
-              landmark_gazetteer_aug_withword_sp <- landmark_gazetteer_aug_withword
-              coordinates(landmark_gazetteer_aug_withword_sp) <- ~lon+lat
-              landmark_gazetteer_aug_withword_distances_mat <- gDistance(landmark_gazetteer_aug_withword_sp, byid=T) * 111.12
-              
-              # Check if cluster exists
-              landmark_gazetteer_aug_withword_distances_list <- landmark_gazetteer_aug_withword_distances_mat %>% as.list %>% unlist
-              cluster_exists <- mean(landmark_gazetteer_aug_withword_distances_list <= 0.5) > .9
-              
-              # If cluster exists, extract coordinates of dominant cluster
-              if(cluster_exists){
-                # Extract columns where more than X % are close together
-                landmark_gazetteer_aug_withword_distances_mat_closeTF <- landmark_gazetteer_aug_withword_distances_mat < 0.5
-                in_dominant_cluster <- (colSums(landmark_gazetteer_aug_withword_distances_mat_closeTF) / nrow(landmark_gazetteer_aug_withword_distances_mat_closeTF) >= .9)
-                
-                landmark_gazetteer_aug_withword <- landmark_gazetteer_aug_withword[in_dominant_cluster,]
-                
-                # Resulting dataframe
-                if(nrow(landmark_gazetteer_aug_withword) > 0){ # just in case...
-                  locations_in_tweet_prep_i <- landmark_gazetteer_aug_withword$name %>% 
-                    unique %>% 
-                    as.data.frame %>%
-                    dplyr::rename(matched_words_correct_spelling = ".") %>%
-                    mutate(matched_words_tweet_spelling = word(tweet_no_stopwords, prep_loc_i+1, prep_loc_i+i-1)) %>%
-                    mutate(exact_match = FALSE) %>%
-                    mutate(location_type = "landmark")
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-    
-    return(locations_in_tweet_prep_i)
-    
-  }) %>% bind_rows
-  
-  #### Remove if landmark already found
-  if(nrow(locations_in_tweet_prep) > 0){
-    locations_in_tweet_prep <- locations_in_tweet_prep[!(locations_in_tweet_prep$matched_words_tweet_spelling %in% locations_in_tweet$matched_words_tweet_spelling),]
-  }
-  
-  #### Add locations in tweets found after prepositions to main locations in tweet dataframe
-  locations_in_tweet <- bind_rows(locations_in_tweet, locations_in_tweet_prep)
-  
-  # Prep Location Datasets -----------------------------------------------------
-  locations_in_tweet <- locations_in_tweet[!(locations_in_tweet$location_type %in% "neighborhood"),]
-  landmark_match <- landmark_match[landmark_match$location_type %in% "landmark",]
-  
   # Choosing which landmarks to use --------------------------------------------
   df_out <- data.frame(matrix(nrow=1,ncol=0))
   
   if(nrow(locations_in_tweet) > 0){
-    
-    # Locations of Words in Tweet --------------------------------------------------
-    #### Locations 
-    # Add location of words in tweet to locations_in_tweet dataframe
-    word_locations <- lapply(as.character(locations_in_tweet$matched_words_tweet_spelling), phrase_locate, tweet) %>% bind_rows
-    locations_in_tweet <- merge(locations_in_tweet, word_locations, by.x="matched_words_tweet_spelling", by.y="word")
-    locations_in_tweet_original <- locations_in_tweet
-    
-    #### Other word types
-    # Create dataframes indicating locations of (1) crash words and (2) prepositions
-    # in tweets
-    crash_word_locations <- lapply(crash_words, phrase_locate, tweet) %>% bind_rows
-    preposition_word_locations <- lapply(prepositions_list, phrase_locate, tweet) %>% bind_rows
-    
-    # *** RESTRICT LOCATIONS TO CONSIDER =======================================
-    
-    # General Landmarks --------------------------------------------------------
-    # General landmarks are those with multiple names, are not close to each
-    # other and there is no dominant cluster. These are more likely to have
-    # spurious names (names not relevant for a location). These will only help
-    # pinpoint a location if a road is mentioned. Consequently, we throw these 
-    # out if a road is not mentioned. If a road is mentioned, we restrict to ones
-    # that are close to a road.
-    
-    # WILL THIS WORK? NEED TO SUBSET ACTUAL LANDMARK_GAZETTEER AND CHANGE LOCATION_IN_TWEET !!!!!!!!!!!!!!!!!!!!!!!!!
-    # NEED TO ACCOUNT FOR WHEN NAME IS BOTH GENERAL AND SPECIFIC
-    
-    landmark_match_general <- merge(landmark_match, landmark_gazetteer, by.x="matched_words_correct_spelling", by.y="name", all.x=T, all.y=F)
-    
-    # If there are any general landmarks
-    if("general" %in% landmark_match_general$general_specific){
-      
-      landmark_match_general <- landmark_match_general[landmark_match_general$general_specific %in% "general",]
-      
-      # If there are roads
-      if(nrow(road_match) > 0){
-        
-        # Add distance to road to general landmarks
-        coordinates(landmark_match_general) <- ~lon+lat
-        crs(landmark_match_general) <- CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0")
-        
-        roads_in_tweet <- roads[roads$name %in% road_match$matched_words_correct_spelling,]
-        roads_in_tweet$id <- 1
-        roads_in_tweet <- raster::aggregate(roads_in_tweet, by="id")
-        
-        landmark_match_general$distance_to_road <- as.numeric(gDistance(landmark_match_general, roads_in_tweet, byid = T)) * 111.12
-        
-        # (1) List of general landmarks far from a road; (2) remove these
-        landmark_match_general <- landmark_match_general[landmark_match_general$distance_to_road >= 0.5,]
-        landmark_match <- landmark_match[!(landmark_match$matched_words_tweet_spelling %in% landmark_match_general$matched_words_tweet_spelling),]
-        
-        # If there are no roads, remove general landmarks    
-      } else{
-        landmark_gazetteer <- landmark_gazetteer[!(landmark_gazetteer$general_specific %in% "general"),]
-        
-        landmark_match_temp <- landmark_match[landmark_match$matched_words_correct_spelling %in% landmark_gazetteer$name,]
-        
-        if(nrow(landmark_match_temp) > 0){
-          landmark_match <- landmark_match_temp
-          locations_in_tweet <- locations_in_tweet[(locations_in_tweet$matched_words_correct_spelling %in% landmark_gazetteer$name) | 
-                                                     !(locations_in_tweet$location_type %in% "landmark"),]
-        }
-        
-        #landmark_match <- landmark_match[!(landmark_match$matched_words_tweet_spelling %in% landmark_match_general$matched_words_tweet_spelling),]
-      }
-      
-    }
-    
-    # Landmark intersects with road, choose road -------------------------------
-    locations_in_tweet <- locations_in_tweet[!(locations_in_tweet$word_loc_min %in% c(Inf,-Inf)),]
-    locations_in_tweet <- locations_in_tweet[!(locations_in_tweet$word_loc_max %in% c(Inf,-Inf)),]
-    # If road name intersects with landmark name, remove landmark 
-    # airtel msa rd: landmark: "airtel mesa", road: "msa rd"
-    
-    if( (TRUE %in% (locations_in_tweet$location_type %in% "landmark")) & (TRUE %in% (locations_in_tweet$location_type %in% "road")) ){
-      
-      # Road locations
-      locations_in_tweet_roads <- locations_in_tweet[locations_in_tweet$location_type %in% "road",]
-      road_locations <- lapply(1:nrow(locations_in_tweet_roads), function(i){
-        road_locs <- locations_in_tweet_roads$word_loc_min[i]:locations_in_tweet_roads$word_loc_max[i]
-        return(road_locs)
-      }) %>% unlist
-      
-      locations_keep <- lapply(1:nrow(locations_in_tweet), function(i){
-        
-        keep <- TRUE
-        
-        if(locations_in_tweet$location_type[i] %in% "landmark"){
-          if(TRUE %in% (locations_in_tweet$word_loc_min[i]:locations_in_tweet$word_loc_max[i] %in% road_locations)){
-            keep <- FALSE
-          }
-        }
-        
-        return(keep)
-      }) %>% unlist
-      
-      locations_in_tweet <- locations_in_tweet[locations_keep,] %>% unique
-      
-    }
-    
-    # If exact intersects with fuzzy, choose exact -----------------------------
-    if((TRUE %in% locations_in_tweet$exact_match) & (FALSE %in% locations_in_tweet$exact_match)){
-      
-      # Road locations
-      locations_in_tweet_exactTRUE <- locations_in_tweet[locations_in_tweet$exact_match %in% TRUE,]
-      exactTRUE_locations <- lapply(1:nrow(locations_in_tweet_exactTRUE), function(i){
-        exactTRUE_locs <- locations_in_tweet_exactTRUE$word_loc_min[i]:locations_in_tweet_exactTRUE$word_loc_max[i]
-        return(exactTRUE_locs)
-      }) %>% unlist
-      
-      locations_keep <- lapply(1:nrow(locations_in_tweet), function(i){
-        
-        keep <- TRUE
-        
-        if(locations_in_tweet$exact_match[i] %in% FALSE){
-          if(TRUE %in% (locations_in_tweet$word_loc_min[i]:locations_in_tweet$word_loc_max[i] %in% exactTRUE_locations)){
-            keep <- FALSE
-          }
-        }
-        
-        return(keep)
-      }) %>% unlist
-      
-      locations_in_tweet <- locations_in_tweet[locations_keep,] %>% unique
-      
-    }
-    
-    # Phase within Phrase ------------------------------------------------------
-    # If phrase within another phrase, choose longer one (pick "garden city mall" over "garden city").
-    # If phrases are same word length, keep both
-    locations_remove <- lapply(1:nrow(locations_in_tweet), function(i){
-      phrase_in_longer_phrase <- ((locations_in_tweet[i,]$word_loc_min >= locations_in_tweet[-i,]$word_loc_min) &
-                                    (locations_in_tweet[i,]$word_loc_max <= locations_in_tweet[-i,]$word_loc_max))
-      
-      same_start_end <- ((locations_in_tweet[i,]$word_loc_min == locations_in_tweet[-i,]$word_loc_min) &
-                           (locations_in_tweet[i,]$word_loc_max == locations_in_tweet[-i,]$word_loc_max))
-      
-      phrase_in_longer_phrase[same_start_end] <- FALSE
-      
-      return(TRUE %in% phrase_in_longer_phrase)
-    }) %>% unlist
-    
-    locations_in_tweet <- locations_in_tweet[!locations_remove,] %>% unique
-    
-    # Same Start/End, choose correctly spelled ---------------------------------
-    # If phrase has same start/end location, only keep ones that are correctly spelled
-    locations_keep <- lapply(1:nrow(locations_in_tweet), function(i){
-      
-      keep_location <- TRUE
-      
-      # Grab all landmarks that start/end same location
-      same_start_end <- ((locations_in_tweet[i,]$word_loc_min == locations_in_tweet$word_loc_min) &
-                           (locations_in_tweet[i,]$word_loc_max == locations_in_tweet$word_loc_max))
-      
-      # Check if one of landmarks with same start/end is spelled correctly;
-      # only subset if that is the case
-      if(TRUE %in% locations_in_tweet$exact_match[same_start_end]){
-        keep_location <- locations_in_tweet$exact_match[i]
-      }
-      
-      return(keep_location)
-      
-    }) %>% unlist
-    
-    locations_in_tweet <- locations_in_tweet[locations_keep,] %>% unique
-    
-    # If same name both road and landmark, drop landmark -----------------------
-    if(("landmark" %in% locations_in_tweet$location_type) & ("road" %in% locations_in_tweet$location_type)){
-      
-      drop_if_landmark <- locations_in_tweet$matched_words_tweet_spelling %in% 
-        locations_in_tweet$matched_words_tweet_spelling[locations_in_tweet$location_type %in% "road"]
-      
-      locations_in_tweet <- locations_in_tweet[!(locations_in_tweet$location_type %in% "landmark" & drop_if_landmark),]
-    }
-    
-    # Find Road Intersection ---------------------------------------------------
-    # Iterates through all 2-road combinations and checks for intersections. Uses
-    # the intersection if intersection points are close together.
-    # TODO: what if road self intersects?
-    
-    locations_in_tweet_roads <- locations_in_tweet[locations_in_tweet$location_type %in% "road",]
-    
-    if(nrow(locations_in_tweet_roads) >= 2){
-      
-      road_combn <- combn(nrow(locations_in_tweet_roads), 2)
-      
-      #### Define Function
-      extract_road_intersection <- function(i){
-        intersection_point <- data.frame(NULL)
-        
-        locations_in_tweet_roads_i <- locations_in_tweet_roads[road_combn[,i],]
-        
-        road_1 <- roads[tolower(roads$name) %in% locations_in_tweet_roads_i$matched_words_correct_spelling[1],]
-        road_2 <- roads[tolower(roads$name) %in% locations_in_tweet_roads_i$matched_words_correct_spelling[2],]
-        
-        intersection_points <- gIntersection(road_1, road_2)
-        
-        # Check if intersection points
-        if(!is.null(intersection_points)){
-          
-          # If maximum distance between points are close together, then use
-          intersection_points_extent <- extent(intersection_points)
-          max_points_dist <- sqrt((intersection_points_extent@xmin - intersection_points_extent@xmax)^2+ (intersection_points_extent@ymin - intersection_points_extent@ymax)^2)*111.12
-          
-          if(max_points_dist < 0.5){
-            intersection_point <- gCentroid(intersection_points)@coords %>% 
-              as.data.frame %>%
-              dplyr::rename(lon = x) %>%
-              dplyr::rename(lat = y) %>%
-              dplyr::mutate(road_correct_spelling_1 = locations_in_tweet_roads_i$matched_words_correct_spelling[1],
-                            road_tweet_spelling_1 = locations_in_tweet_roads_i$matched_words_tweet_spelling[1],
-                            road_correct_spelling_2 = locations_in_tweet_roads_i$matched_words_correct_spelling[2],
-                            road_tweet_spelling_2 = locations_in_tweet_roads_i$matched_words_tweet_spelling[2])
-          }
-        }
-        
-        return(intersection_point)
-      }
-      
-      #### Implement Function; Grab Intersections
-      road_intersections <- lapply(1:ncol(road_combn), extract_road_intersection) %>% bind_rows
-      
-      #### Add variable to "locations_in_tweet" if road is part of intersection
-      # TODO
-      
-    } else{
-      # Other parts check nrow(road_intersections), so make blank dataframe
-      road_intersections <- data.frame(NULL)
-    }
     
     # *** ADD VARIABLES TO LOCATIONS DATAFRAME =================================
     
