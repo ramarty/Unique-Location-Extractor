@@ -294,6 +294,8 @@ locate_event_i <- function(text_i){
   }
   
   # 3. Quick Location Dataset Prep ---------------------------------------------
+  # Before subset, save original -- add these to final output
+  locations_in_tweet_original <- locations_in_tweet
   
   locations_in_tweet <- locations_in_tweet[!(locations_in_tweet$location_type %in% "neighborhood"),]
   
@@ -531,56 +533,14 @@ locate_event_i <- function(text_i){
         
         # TODO: If road is short, make point. Check extent, and if extent small,
         # grab the centroid
-
+        
       }
     }
     
     # 5.4 ESTATE / ESTATE + ROAD COMBINATION -----------------------------------
-    
 
+    # 6. Add Variables to Output -----------------------------------------------
     
-    
-    
-    
-    
-    
-    
-  }
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-}
-
-
-
-}
-
-
-##### ******************************************************************** #####
-# OLD Algorithm ================================================================
-counter_to_display <- 1
-locate_event <- function(tweet){
-  
-  # Choosing which landmarks to use --------------------------------------------
-  df_out <- data.frame(matrix(nrow=1,ncol=0))
-  
-  if(nrow(locations_in_tweet) > 0){
-    
-    
-    
-    # *** CLEAN OUTPUT =========================================================
     # 1. Add all location types found
     # 2. Add tweet
     if("landmark" %in% locations_in_tweet_original$location_type){
@@ -597,26 +557,31 @@ locate_event <- function(tweet){
       df_out$neighborhoods_all_tweet_spelling <- locations_in_tweet_original$matched_words_tweet_spelling[locations_in_tweet_original$location_type %in% "neighborhood"] %>% unique %>% paste(collapse=",")
       df_out$neighborhoods_all_correct_spelling <- locations_in_tweet_original$matched_words_correct_spelling[locations_in_tweet_original$location_type %in% "neighborhood"] %>% unique %>% paste(collapse=",")
     }
+    
+    df_out$text <- text_i
+    if(!is.null(df_out$dist_closest_crash_word)) df_out$dist_closest_crash_word <- as.character(df_out$dist_closest_crash_word)
+    
   }
   
-  df_out$tweet_clean <- tweet
-  if(!is.null(df_out$dist_closest_crash_word)) df_out$dist_closest_crash_word <- as.character(df_out$dist_closest_crash_word)
+  # 7. Clean Spatial Output --------------------------------------------------
   
-  #### If output is point, make spatial point
-  if(!is.null(df_out$lat)){
-    if(!is.na(df_out$lat)){
-      coordinates(df_out) <- ~lon+lat
-      crs(df_out) <- CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0")
-      df_out <- st_as_sf(df_out)
-    }
+  # If spatial object, reproject and make sf
+  if(typeof(df_out) %in% "S4"){
+    df_out <- spTransform(df_out, CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+    df_out <- st_as_sf(df_out)
+  } else{
+    # If not spatial object, give null geometry
+    df_out <- st_sf(df_out, geom = st_sfc(st_point()))
   }
   
-  #### If output doesn't have a geometry, give a null geometry
-  if(is.null(df_out$geometry)) df_out <- st_sf(df_out, geom = st_sfc(st_point()))
   
   counter_to_display <<- counter_to_display + 1
   print(counter_to_display)
   
   return(df_out)
+  
 }
+
+
+
 
