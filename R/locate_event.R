@@ -21,48 +21,15 @@ library(jsonlite)
 library(maptools)
 library(sf)
 
-counter.number <- 1
-
 # Algorithm Inputs -------------------------------------------------------------
 if(F){
   
   text <- "crash near airtel on mombasa rd words words words yaya center kenyatta ave westlands"
   text_i <- text
   
+  # Load Data ------------------------------------------------------------------
   AUG_GAZ <- T
   
-  # ALGORITHM PARAMETERS
-  fuzzy_match_landmark <- TRUE
-  fuzzy_match_landmark.min.word.length <- c(5,11) # minimum word length for fuzzy match
-  fuzzy_match_landmark.dist <- c(1,2) # maximum levenstein distance to use
-  fuzzy_match_ngram_max <- 3
-  #prepositions_list <- c("near", "at")
-  crash_words <- c("accidents", "accident", "crash", "overturn", "collision", "wreck") # hit?
-  junction_words <- c("intersection", "junction")
-  first_letters_same <- TRUE
-  last_letters_same <- TRUE # !!!!!!!! fails for roysambo/u. Maybe: if 1 letter off, only first letter needs to be same. But be more restrictive with 2?
-  import_files <- FALSE
-  tier_1_prepositions <- c("at", "next to","around", "just after", "opposite","opp", "apa", "hapa","happened at","just before","at the","outside","right before")
-  tier_2_prepositions <- c("near", "after", "toward","along", "towards", "approach")
-  tier_3_prepositions <- c("past","from","on")
-  projection <- "+init=epsg:21037"
-  
-  prepositions_list <- list(c("at", "next to","around", "just after", "opposite","opp", "apa", "hapa","happened at","just before","at the","outside","right before"),
-                            c("near", "after", "toward","along", "towards", "approach"),
-                            c("past","from","on"))
-  
-  # False positive words are those that frequently appear in tweets that refer to 
-  # something specific, but part of the name refers to a useful location. So 
-  # algorithm thinks is location but is really something else. An example is 
-  # "githurai bus", which refers to a bus that travels to/from githurai -- but
-  # where githurai is also a location.
-  false_positive_phrases <- c("githurai bus", "githurai matatu", 
-                              "githurai 45 bus", "githurai 45 matatu",
-                              "city hoppa bus", "hoppa bus",
-                              "rongai bus", "rongai matatu", "rongai matatus",
-                              "machakos bus", "machakos minibus", "machakos matatu")
-  
-  # Import
   if(AUG_GAZ){
     landmark_gazetteer_orig <- readRDS(file.path(algorithm_inputs, "gazetteers_augmented", "gazetteer_aug.Rds"))
   } else{
@@ -80,10 +47,85 @@ if(F){
   areas@data <- areas@data %>%
     dplyr::rename(name = estate)
   
+  # Parameters -----------------------------------------------------------------
+  text <- text
+  
+  landmarks <- landmark_gazetteer_orig
+  roads <- roads
+  areas <- areas
+  
+  preposition_list <- list(c("at", "next to","around", "just after", "opposite","opp", "apa", "hapa","happened at","just before","at the","outside","right before"),
+                           c("near", "after", "toward","along", "towards", "approach"),
+                           c("past","from","on"))
+  event_words <- c("accidents", "accident", "crash", "overturn", "collision", "wreck")
+  junction_words <- c("intersection", "junction")
+  false_positive_phrases <- c("githurai bus", "githurai matatu", 
+                              "githurai 45 bus", "githurai 45 matatu",
+                              "city hoppa bus", "hoppa bus",
+                              "rongai bus", "rongai matatu", "rongai matatus",
+                              "machakos bus", "machakos minibus", "machakos matatu")
+  type_list <- c("")
+  
+  fuzzy_match <- TRUE
+  fuzzy_match.min_word_length <- c(5,11)
+  fuzzy_match.dist <- c(1,2)
+  fuzzy_match.ngram_max <- 3
+  fuzzy_match.first_letters_same <- TRUE
+  fuzzy_match.last_letters_same <- TRUE
+  
+  crs_distance <- "+init=epsg:21037"
+  crs_out <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
+  
+  # ******* OLD ************************************************************** #
+  
+  # ALGORITHM PARAMETERS
+  fuzzy_match_landmark <- TRUE
+  fuzzy_match_landmark.min.word.length <- c(5,11) # minimum word length for fuzzy match
+  fuzzy_match_landmark.dist <- c(1,2) # maximum levenstein distance to use
+  fuzzy_match_ngram_max <- 3
+  crash_words <- c("accidents", "accident", "crash", "overturn", "collision", "wreck") # hit?
+  junction_words <- c("intersection", "junction")
+  first_letters_same <- TRUE
+  last_letters_same <- TRUE # !!!!!!!! fails for roysambo/u. Maybe: if 1 letter off, only first letter needs to be same. But be more restrictive with 2?
+  
+  projection <- "+init=epsg:21037"
+  
+  prepositions_list <- list(c("at", "next to","around", "just after", "opposite","opp", "apa", "hapa","happened at","just before","at the","outside","right before"),
+                            c("near", "after", "toward","along", "towards", "approach"),
+                            c("past","from","on"))
+  
+  # False positive words are those that frequently appear in tweets that refer to 
+  # something specific, but part of the name refers to a useful location. So 
+  # algorithm thinks is location but is really something else. An example is 
+  # "githurai bus", which refers to a bus that travels to/from githurai -- but
+  # where githurai is also a location.
+  false_positive_phrases <- c("githurai bus", "githurai matatu", 
+                              "githurai 45 bus", "githurai 45 matatu",
+                              "city hoppa bus", "hoppa bus",
+                              "rongai bus", "rongai matatu", "rongai matatus",
+                              "machakos bus", "machakos minibus", "machakos matatu")
+  
 }
 
 # ALGORITHM NEW ================================================================
-locate_event <- function(text){
+locate_event <- function(text,
+                         landmarks, 
+                         roads, 
+                         areas, 
+                         prepositions_list, 
+                         event_words, 
+                         junction_words, 
+                         false_positive_phrases, 
+                         type_list, 
+                         fuzzy_match = TRUE,
+                         fuzzy_match.min_word_length = c(5,11),
+                         fuzzy_match.dist = c(1,2),
+                         fuzzy_match.ngram_max = 3,
+                         fuzzy_match.first_letters_same = TRUE,
+                         fuzzy_match.last_letters_same = TRUE,
+                         crs_distance, 
+                         crs_out = "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0",
+                         quiet = F){
   
   # 1. Checks ------------------------------------------------------------------
   # Check inputs and output errors if anything is wrong.
@@ -94,9 +136,9 @@ locate_event <- function(text){
   # Cleans and preps gazetteer and road files
   
   #### Project Data
-  landmark_gazetteer <- spTransform(landmark_gazetteer, CRS(projection))
-  roads              <- spTransform(roads,              CRS(projection))
-  areas              <- spTransform(areas,              CRS(projection))
+  landmark_gazetteer <- spTransform(landmark_gazetteer, CRS(crs_distance))
+  roads              <- spTransform(roads,              CRS(crs_distance))
+  areas              <- spTransform(areas,              CRS(crs_distance))
   
   #### Clean Names
   landmark_gazetteer$name <- landmark_gazetteer$name %>%
@@ -178,13 +220,49 @@ locate_event <- function(text){
                                        paste(collapse=" "))
   }
   
-  # 4. OTHER STUFF HERE --------------------------------------------------------
+  # 4. Implement Algorithm -----------------------------------------------------
+  counter_number <- 1
   
-  # lapply, allow mclapply, bind sf objects efficiently
+  out_all <- lapply(text,
+                    locate_event_i,
+                    landmarks                      = landmarks, 
+                    roads                          = roads, 
+                    areas                          = areas, 
+                    prepositions_list              = prepositions_list, 
+                    event_words                    = event_words, 
+                    junction_words                 = junction_words, 
+                    false_positive_phrases         = false_positive_phrases, 
+                    type_list                      = type_list, 
+                    fuzzy_match                    = fuzzy_match,
+                    fuzzy_match.min_word_length    = fuzzy_match.min_word_length,
+                    fuzzy_match.dist               = fuzzy_match.dist,
+                    fuzzy_match.ngram_max          = fuzzy_match.ngram_max,
+                    fuzzy_match.first_letters_same = fuzzy_match.first_letters_same,
+                    fuzzy_match.last_letters_same  = fuzzy_match.last_letters_same,
+                    crs_out                        = crs_out,
+                    quiet                          = quiet) # %>%
+  # [append sf objects]
   
+  return(out_all)
 }
 
-locate_event_i <- function(text_i){
+locate_event_i <- function(text_i,
+                           landmarks,
+                           roads,
+                           areas,
+                           prepositions_list,
+                           event_words,
+                           junction_words,
+                           false_positive_phrases,
+                           type_list,
+                           fuzzy_match,
+                           fuzzy_match.min_word_length,
+                           fuzzy_match.dist,
+                           fuzzy_match.ngram_max,
+                           fuzzy_match.first_letters_same,
+                           fuzzy_match.last_letters_same,
+                           crs_out,
+                           quiet){
   
   # 1. Determine Location Matches in Gazetteer ---------------------------------
   #### Exact Match
@@ -710,12 +788,11 @@ locate_event_i <- function(text_i){
     df_out <- st_sf(df_out, geom = st_sfc(st_point()))
   }
   
-  
-  counter_to_display <<- counter_to_display + 1
-  print(counter_to_display)
+  # Printing to show progress
+  counter_number <<- counter_number + 1
+  print(counter_number)
   
   return(df_out)
-  
 }
 
 
