@@ -1,3 +1,403 @@
+
+##### ******************************************************************** #####
+# OTHER ------------------------------------------------------------------------
+bind_rows_sf <- function(...){
+  # Description: Bind rows of spatial features
+  
+  sf_list <- rlang::dots_values(...)[[1]]
+  
+  sfg_list_column <- lapply(sf_list, function(sf) sf$geometry[[1]]) %>% st_sfc
+  df <- lapply(sf_list, function(sf) st_set_geometry(sf, NULL)) %>% bind_rows
+  
+  sf_appended <- st_sf(data.frame(df, geom=sfg_list_column))
+  
+  return(sf_appended)
+}
+
+extract_dominant_cluster <- function(sdf,
+                                     close_thresh_km = 0.5,
+                                     cluster_thresh = 0.9,
+                                     N_loc_limit = 100,
+                                     return_coord_only = F){
+  # DESCRIPTION: Finds a dominant spatial cluster in a set of points
+  # ARGS:
+  # sdf: Spatial points dataframe. Assumed to be projected.
+  # close_thresh_km: distance threshold (in kilometers) at which points
+  #                  are considered close
+  # cluster_thresh: Cluster threshold, which defines the proportion of points
+  #                 that must be close by to be considered a dominant 
+  #                 spatial cluster.
+  # N_loc_limit: If points aren't close, only attempts to find a dominant
+  #              spatial cluster if the number of points is less than this 
+  #              threshold. If the number of points is above this threshold,
+  #              we run into computational efficiency issues in calculating
+  #              distance matrix and just assume unlikely to find a dominant
+  #              cluster.
+  # return_coord_only: If TRUE, just returns the centroid coordinates of the
+  #                    dominant spatial cluster. If FALSE, returns all 
+  #                    the original spatial dataframe but subsetted to the
+  #                    observations in the dominant spatial cluster. If no
+  #                    dominant spatial cluster is found, a NULL dataframe
+  #                    is returned.
+  
+  # Default output if not cluster is found
+  sdf_out <- data.frame(NULL)
+  
+  # 1. Fast all close check 
+  sdf_extent <- extent(sdf) 
+  
+  max_dist_km <- sqrt((sdf_extent@xmax - sdf_extent@xmin)^2 +
+                        (sdf_extent@ymax - sdf_extent@ymin)^2) / 1000
+  
+  # If everything is close...
+  if(max_dist_km < close_thresh_km){
+    
+    sdf_out <- sdf
+    
+    # If locations aren't close and not too many locations...  
+  } else if ( (max_dist_km > close_thresh_km) & (nrow(sdf) <= N_loc_limit)){
+    
+    ## Distance matrix
+    sdf_dist_mat <- gDistance(sdf, byid=T) / 1000
+    
+    # Check if cluster exists
+    sdf_dist_mat_list <- sdf_dist_mat %>% as.list %>% unlist
+    cluster_exists <- mean(sdf_dist_mat_list <= close_thresh_km) >= cluster_thresh
+    
+    # If cluster exists, extract coordinates of dominant cluster
+    if(cluster_exists){
+      # Extract columns where more than X % are close together
+      close_thresh_km_closeTF <- sdf_dist_mat <= close_thresh_km
+      in_dominant_cluster <- (colSums(close_thresh_km_closeTF) / nrow(close_thresh_km_closeTF) >= .9)
+      
+      sdf <- sdf[in_dominant_cluster,]
+      
+      sdf_out <- sdf
+    }
+    
+  }
+  
+  return(sdf_out)
+}
+
+##### ******************************************************************** #####
+# SEARCHING FOR LOCATIONS ------------------------------------------------------
+phrase_in_sentence_exact <- function(sentence,
+                                     phrase_list){
+  
+  # Description: Determines which words or phrases are in a sentence using an exact match
+  # sentence: sentence to examine
+  # phrase_list: list of phrases to check if in sentence
+  
+  # Grabs landmarks in sentence, regardless of word boundaries (faster than checking with boundaries)
+  locations_candidates <- sentence %>%
+    str_extract_all(fixed(phrase_list)) %>% 
+    unlist() %>%
+    unique
+  
+  if(length(locations_candidates) > 0){
+    
+    # Add word boundaries
+    locations_candidates <- paste0("\\b", locations_candidates, "\\b")
+    
+    locations_df <- sentence %>%
+      str_extract_all(locations_candidates) %>% 
+      unlist() %>%
+      unique %>%
+      as.data.frame %>%
+      dplyr::rename(matched_words_tweet_spelling = ".") %>%
+      dplyr::mutate(matched_words_correct_spelling = matched_words_tweet_spelling) %>%
+      dplyr::mutate(exact_match = T)
+    
+  } else{
+    locations_df <- data.frame(NULL)
+  }
+  
+  return(locations_df)
+}
+
+phrase_in_sentence_fuzzy_i <- function(sentence, 
+                                       phrase_list, 
+                                       fuzzy_match_landmark.min.word.length, 
+                                       fuzzy_match_landmark.dist,
+                                       fuzzy_match_ngram_max,
+                                       first_letters_same,
+                                       last_letters_same){
+  # Description: Determine if a word or phrase (ie, ngram) is in a sentence using 
+  # a fuzzy match
+  # sentence: sentence to examine
+  # phrase_list: list of phrases to check if in sentence
+  # fuzzy_match_landmark.min.word.length: excludes phrases below this number of characters
+  # fuzzy_match_landmark.dist: maximum levenstein distance to allow phrases to match
+  # fuzzy_match_ngram_max: number of ngrams to check if in sentence (equal or less than max words in phrase in phrase_list)
+  # first_letters_same: only keep matches where first letters are the same
+  # last_letters_same: only keep matches where last letters are the same
+  
+  #### Tweet preparation
+  # Remove stop words (replace with other words to preserve fact that words are
+  # between other words)
+  
+  remove_words_regex <- paste(c(paste0("\\b",tier_1_prepositions,"\\b"),
+                                paste0("\\b",tier_2_prepositions,"\\b"),
+                                paste0("\\b",tier_3_prepositions,"\\b"),
+                                paste0("\\b",crash_words,"\\b"),
+                                paste0("\\b",junction_words,"\\b")), collapse="|")
+  sentence <- sentence %>% str_replace_all(remove_words_regex, "thisisafillerwordpleaseignoremore") %>% str_squish
+  
+  #### Checks
+  if(length(fuzzy_match_landmark.min.word.length) != length(fuzzy_match_landmark.dist)){
+    stop("fuzzy_match_landmark.min.word.length and fuzzy_match_landmark.dist must be the same length")
+  }
+  
+  phrase_list <- unique(phrase_list)
+  
+  #### Extract n-grams from sentence
+  if(str_count(sentence, '\\w+') > 1){
+    sentence_words <- ngram::ngram_asweka(sentence, min=1, max=fuzzy_match_ngram_max) 
+  } else{
+    sentence_words <- sentence
+  }
+  
+  ## Limit n-grams
+  # Only consider n-grams that have more than X characters
+  # Don't include certain words (eg, "road") in count
+  sentence_words_nchar <- nchar(sentence_words)
+  
+  for(word_dont_consider in c("road", "rd", "street", "st", "avenue", "ave")){
+    sentence_words_nchar[grepl(paste0("\\b", word_dont_consider, "\\b"), sentence_words)] <- sentence_words_nchar[grepl(paste0("\\b", word_dont_consider, "\\b"), sentence_words)] - nchar(word_dont_consider)
+  }
+  
+  sentence_words <- sentence_words[sentence_words_nchar >= fuzzy_match_landmark.min.word.length] 
+  
+  # Only consider n-grams that don't start with a stop word
+  stopwords_regex <- paste0("^", stopwords() , "\\b") %>% paste(collapse="|")
+  sentence_words <- sentence_words[!grepl(stopwords_regex, sentence_words)]
+  
+  sentence_words <- sentence_words[!grepl("thisisafillerwordpleaseignoremore",sentence_words)]
+  
+  #### Limit phrase_list to speed up matching
+  # If say that first and last letters must be same, restrict to phrases where
+  # this must be the case
+  if(first_letters_same){
+    first_letters_sentence <- sentence_words %>% str_sub(1,1)
+    phrase_list <- phrase_list[str_sub(phrase_list,1,1) %in% first_letters_sentence]
+  }
+  
+  if(last_letters_same){
+    last_letters_sentence <- sentence_words %>% str_sub(-1,-1)
+    phrase_list <- phrase_list[str_sub(phrase_list,-1,-1) %in% last_letters_sentence]
+  }
+  
+  # Levenstein Distance
+  phrase_match_loc <- amatch(sentence_words, phrase_list, maxDist = fuzzy_match_landmark.dist, method="lv")
+  
+  # Check if any matches found
+  if(sum(!is.na(phrase_match_loc)) > 0){
+    
+    # Locations Dataframe
+    locations_df <- data.frame(matched_words_tweet_spelling = sentence_words[!is.na(phrase_match_loc)],
+                               matched_words_correct_spelling = phrase_list[phrase_match_loc[!is.na(phrase_match_loc)]],
+                               exact_match = F)
+    
+    # Restrict to ones where first letter is the same
+    if(first_letters_same == TRUE){
+      
+      first_letter_tweet_spelling <- locations_df$matched_words_tweet_spelling %>% str_sub(1,1)
+      first_letter_correct_spelling <- locations_df$matched_words_correct_spelling %>% str_sub(1,1)
+      
+      locations_df <- locations_df[first_letter_tweet_spelling %in% first_letter_correct_spelling,]
+      
+    }
+    
+    # Restrict to ones where last letter is the same
+    if(last_letters_same == TRUE){
+      
+      last_letter_tweet_spelling <- locations_df$matched_words_tweet_spelling %>% str_sub(-1,-1)
+      last_letter_correct_spelling <- locations_df$matched_words_correct_spelling %>% str_sub(-1,-1)
+      
+      locations_df <- locations_df[last_letter_tweet_spelling %in% last_letter_correct_spelling,]
+      
+    }
+    
+    # Format
+    locations_df <- locations_df %>%
+      mutate(matched_words_tweet_spelling   = matched_words_tweet_spelling %>% as.character(),
+             matched_words_correct_spelling = matched_words_correct_spelling %>% as.character())
+    
+  } else{
+    locations_df <- data.frame(NULL)
+  }
+  
+  return(locations_df)
+}
+
+phrase_in_sentence_fuzzy <- function(text_i, 
+                                     landmark_list,
+                                     fuzzy_match_landmark.min.word.length, 
+                                     fuzzy_match_landmark.dist, 
+                                     fuzzy_match_ngram_max,
+                                     first_letters_same,
+                                     last_letters_same){
+  
+  # Implements phrase_in_sentence_fuzzy_i, looping through different
+  # values of fuzzy_match_landmark.min.word.length and fuzzy_match_landmark.dist
+  
+  df <- lapply(1:length(fuzzy_match_landmark.min.word.length), function(i){
+    df_i <- phrase_in_sentence_fuzzy_i(text_i, 
+                                       landmark_list,
+                                       fuzzy_match_landmark.min.word.length[i], 
+                                       fuzzy_match_landmark.dist[i], 
+                                       fuzzy_match_ngram_max,
+                                       first_letters_same,
+                                       last_letters_same)
+    return(df_i)
+  }) %>% 
+    bind_rows %>% 
+    unique
+  
+  return(df)
+}
+
+phrase_locate <- function(phrase, sentence){
+  # Description: Takes a word or phrase and a sentence as input and returns the
+  # start and end word location of the phrase within the sentence. For example,
+  # if phrase is "garden city" and sentence is "crash near garden city involving
+  # pedestrian", the function will return a dataframe with three variables:
+  # word = "garden city", word_loc_min = 3, word_loc_min = 4.
+  # phrase: phrase or word 
+  # sentence: sentence to search in
+  
+  # Check if phrase in sentence
+  if(grepl(paste0("\\b",phrase,"\\b"), sentence)){
+    
+    # Sentence Word and Character Position
+    sentence_words_loc <- strsplit(sentence," ") %>% 
+      as.data.frame %>% 
+      dplyr::rename(word = names(.)[1])
+    sentence_words_loc$word <- as.character(sentence_words_loc$word)
+    sentence_words_loc$word_number <- 1:nrow(sentence_words_loc)
+    sentence_words_loc$word_length <- nchar(sentence_words_loc$word)
+    sentence_words_loc$word_char_start <- lapply(1:nrow(sentence_words_loc), tweet_word_start_character, sentence_words_loc) %>% unlist
+    
+    phrase_char_start_end <- str_locate_all(sentence, phrase)[[1]]
+    
+    phrase_location_df <- lapply(1:nrow(phrase_char_start_end),
+                                 function(i){
+                                   df <- sentence_words_loc[sentence_words_loc$word_char_start >= phrase_char_start_end[i,][1] & sentence_words_loc$word_char_start <= phrase_char_start_end[i,][2],]
+                                   df_out <- data.frame(word_loc_min = min(df$word_number),
+                                                        word_loc_max = max(df$word_number))
+                                   return(df_out)
+                                 }) %>% bind_rows
+    
+    phrase_location_df$word <- phrase
+  } else{
+    warning("phrase is not in sentence")
+    phrase_location_df <- data.frame(NULL)
+  }
+  
+  return(phrase_location_df)
+}
+
+tweet_word_start_character <- function(i, tweet_words_loc){
+  # Supports: phrase_locate function
+  if(i == 1){
+    return(1)
+  } else{
+    return(sum(tweet_words_loc$word_length[1:(i-1)]) + i)
+  }
+}
+
+extract_locations_after_words <- function(word_loc, 
+                                          text, 
+                                          landmarks){
+  # DESCRIPTION: Searches for location references after words (typically 
+  # prepositions). Allows for partially matchine names.
+  # ARGS:
+  # word_loc: Index of the word (eg, preposition) in the text. For example,
+  #           "accident near garden city", if the word for "word_loc" is "near",
+  #           the index would be 2.
+  # text: Text to search for locations
+  # landmark_gazetteer: Spatial dataframe of landmarks with a "name" variable.
+  
+  ## Default - blank spatial polygons dataframe. Make sure has a variable
+  # that typical output would include
+  landmarks_out <- data.frame(NULL)
+  
+  # 1. Conditions to check for word ------------------------------------------
+  # Check for conditions based on the next word after the propsotion. If one
+  # of the following conditions exists, we don't consider words after the 
+  # preposition
+  next_word <- word(text, word_loc+1)
+  
+  next_word_none <- is.na(next_word)
+  next_word_ignoreword <- next_word %in% c(stopwords::stopwords(language="en"), "exit", "top", "bottom", "scene")
+  next_word_short <- nchar(next_word) < 3
+  
+  if(!next_word_none & !next_word_ignoreword & !next_word_short){
+    
+    # 2. Grab gazeteer words after preposition -------------------------------
+    
+    ## Start with full gazeteer
+    landmarks_subset <- landmarks
+    
+    ## Loop through words after preposition
+    for(i in 1:10){
+      word_i <- word(text, word_loc+i)
+      
+      # If first word after preposition, the gazetteer word must start with that word.
+      # Restrict words in gazetteer, creating a temporary dataframe
+      if(i == 1) landmarks_subset_candidate <- landmarks_subset[grepl(paste0("^", word_i, "\\b"),   landmarks_subset$name), ]
+      if(i > 1)  landmarks_subset_candidate  <- landmarks_subset[grepl(paste0("\\b", word_i, "\\b"), landmarks_subset$name), ]
+      
+      # If the gazeteer still has words after subsetting, replace
+      # gazeteer with gazeteer_temp. If gazeteer doesn't have words left,
+      # break out of loop and use last version of gazeteer with words.
+      if(nrow(landmarks_subset_candidate) > 0){
+        landmarks_subset <- landmarks_subset_candidate
+      } else{
+        break
+      }
+      
+    }
+    
+    # 3. Subset selected words -----------------------------------------------
+    # Keep landmarks with shortest word length. For example, if landmark
+    # with fewest words has 2 words, we only keep landmarks with 2 words
+    min_words <- min(str_count(landmarks_subset$name, "\\S+"))
+    landmarks_subset <- landmarks_subset[str_count(landmarks_subset$name, "\\S+") %in% min_words,]
+    landmarks_subset <- landmarks_subset[!is.na(landmarks_subset$lat),] # if blank, will give one row with NAs
+    
+    # 4. Check for dominant cluster ------------------------------------------
+    landmarks_subset <- extract_dominant_cluster(landmarks_subset)
+    
+    # 5. Format Output -------------------------------------------------------
+    if(nrow(landmarks_subset) >= 1){
+      
+      landmarks_subset@data <- landmarks_subset@data %>%
+        dplyr::rename(matched_words_correct_spelling = name) %>%
+        mutate(exact_match = FALSE,
+               location_type = "landmark")
+      
+      ## Add tweet spelling
+      max_word_length <- landmarks_subset$matched_words_correct_spelling %>% str_count("\\S+") %>% max()
+      
+      landmarks_subset@data <- landmarks_subset@data %>%
+        mutate(matched_words_tweet_spelling = word(text,
+                                                   word_loc + 1,
+                                                   word_loc + max_word_length))
+      
+      landmarks_out <- landmarks_subset@data
+    }
+    
+  }
+  
+  return(landmarks_out)
+  
+}
+
+##### ******************************************************************** #####
+# SUBSET LOCATIONS -------------------------------------------------------------
+
 remove_general_landmarks <- function(landmark_match,
                                      landmark_gazetteer,
                                      road_match_sp){
@@ -145,7 +545,7 @@ phase_overlap <- function(locations_in_tweet){
 
 exact_fuzzy_startendsame <- function(locations_in_tweet){
   
-  # Same Start/End, choose correctly spelled ---------------------------------
+  # Same Start/End, choose correctly spelled 
   # If phrase has same start/end location, only keep ones that are correctly spelled
   locations_keep <- lapply(1:nrow(locations_in_tweet), function(i){
     
@@ -269,3 +669,324 @@ extract_intersections <- function(locations_in_tweet,
   return(road_intersections)
   
 }
+
+##### ******************************************************************** #####
+# ADD REGEX VARIABLES TO LOCATION DATA -----------------------------------------
+# TODO: Could generalize so that landmarks could be not treated separately. This 
+#       would actually work as is if combine roads, so, for example:
+#       location = mombasa rd|kenyatta ave
+
+search_crashword_prepos <- function(text, 
+                                    location_words, 
+                                    crash_words, 
+                                    prepositions){
+  # For each location determine whether, [crash_word] [preposition] [location_word]
+  # pattern exists.
+  
+  crash_words_regex  <- paste(paste0("\\b",crash_words,"\\b"),collapse="|")
+  prepositions_regex <- paste(paste0("\\b",prepositions,"\\b"),collapse="|")
+  
+  crashword_prepos_TF <- lapply(location_words, function(location){
+    regex_expression <- paste0(paste0("(",crash_words_regex,")."),
+                               paste0("(",prepositions_regex,")."),
+                               location)
+    fits_pattern <- grepl(regex_expression, text)
+    return(fits_pattern)
+  }) %>% unlist
+  
+  return(crashword_prepos_TF)
+}
+
+search_crashword_other_prepos <- function(text, 
+                                          location_words, 
+                                          crash_words, 
+                                          prepositions,
+                                          N_other_words=2){
+  
+  crash_words_regex  <- paste(paste0("\\b",crash_words,"\\b"),collapse="|")
+  prepositions_regex <- paste(paste0("\\b",prepositions,"\\b"),collapse="|")
+  
+  TF <- lapply(location_words, function(location){
+    
+    regex_expression <- paste0(paste0("(",crash_words_regex,")."),
+                               "(.*).",
+                               paste0("(",prepositions_regex,")."),
+                               location)
+    fits_pattern <- grepl(regex_expression, text)
+    
+    ## Number of words in between
+    if(fits_pattern){
+      # remove all text after location and before crashword [MIGHT FAIL IF >2 CRASHWORDS]
+      otherwords_numwords <- tweet %>% 
+        str_replace_all(paste0("(",location,").*"),"\\1") %>% 
+        str_replace_all(paste0(".*(",crash_words_regex,")"),"\\1") %>% 
+        str_replace_all(regex_expression,"\\2") %>% 
+        str_count("\\S+")
+      
+      if(otherwords_numwords > N_other_words){
+        fits_pattern <- F
+      }
+    } 
+    
+    return(fits_pattern)
+  }) %>% unlist
+  
+  return(TF)
+}
+
+search_prep_loc <- function(text, location_words, prepositions){
+  
+  # Preposition before location word
+  
+  prepositions_regex <- paste(paste0("\\b",prepositions,"\\b"),collapse="|")
+  
+  TF <- lapply(location_words, function(location){
+    regex_expression <- paste0(paste0("(",prepositions_regex,")."),
+                               location)
+    fits_pattern <- grepl(regex_expression, tweet)
+    return(fits_pattern)
+  }) %>% unlist
+  
+  return(TF)
+}
+
+##### ******************************************************************** #####
+# DETERMINE EVENT LOCATION -----------------------------------------------------
+
+choose_between_multiple_landmarks <- function(df_out){
+  #### Function for strategy of dealing with multiple landmarks (different names)
+  
+  # 1. Restrict landmarks based on preposition tiers
+  if(TRUE %in% df_out$tier_1_prepos_before_crashword){
+    df_out <- df_out[df_out$tier_1_prepos_before_crashword %in% TRUE,]
+    df_out$how_determined_landmark <- paste(df_out$how_determined_landmark, "restrict_to_tier1_prepositions", sep=";")
+  } else if(TRUE %in% df_out$tier_2_prepos_before_crashword){
+    df_out <- df_out[df_out$tier_2_prepos_before_crashword %in% TRUE,]
+    df_out$how_determined_landmark <- paste(df_out$how_determined_landmark, "restrict_to_tier2_prepositions", sep=";")
+  } else if(TRUE %in% df_out$tier_3_prepos_before_crashword){
+    df_out <- df_out[df_out$tier_3_prepos_before_crashword %in% TRUE,]
+    df_out$how_determined_landmark <- paste(df_out$how_determined_landmark, "restrict_to_tier3_prepositions", sep=";")
+  }
+  
+  # 2. If road mentioned, restrict to landmarks near road
+  if(nrow(roads_final) > 0){
+    df_out_sp <- df_out
+    coordinates(df_out_sp) <- ~lon+lat
+    crs(df_out_sp) <- CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0")
+    
+    roads_in_tweet <- roads[roads$name %in% roads_final$matched_words_correct_spelling,]
+    roads_in_tweet$id <- 1
+    roads_in_tweet <- raster::aggregate(roads_in_tweet, by="id")
+    df_out_sp$distance_road <- as.numeric(gDistance(roads_in_tweet, df_out_sp, byid=T)) * 111.12
+    df_out_sp <- df_out_sp[df_out_sp$distance_road < 0.5,]
+    
+    if(nrow(df_out_sp) > 0){
+      df_out <- df_out[df_out$matched_words_correct_spelling %in% df_out_sp$matched_words_correct_spelling,]
+      df_out$how_determined_landmark <- paste(df_out$how_determined_landmark, "multiple_landmarks_restrict_to_near_roads", sep=";")
+    } else{
+      df_out$how_determined_landmark <- paste(df_out$how_determined_landmark, "multiple_landmarks_tried_restrict_to_near_roads_but_none_near_road", sep=";")
+    }
+  }
+  
+  # 3. Use landmark closest to crash word. 
+  # if there are two words, one with distance -2 and one with distance 2, which.min()
+  # will just give the first one. Consequently, use another approach to grab both.
+  # Only use if a crash word exists in tweet.
+  if(is.null(df_out$dist_closest_crash_word) %in% FALSE){
+    landmark_closest_crashword <- df_out$matched_words_correct_spelling[abs(df_out$dist_closest_crash_word) %in% min(abs(df_out$dist_closest_crash_word))] %>% unique()
+    df_out <- df_out[df_out$matched_words_correct_spelling %in% landmark_closest_crashword,]
+    df_out$how_determined_landmark <- paste(df_out$how_determined_landmark, "multiple_landmarks_choose_closest_crashword", sep=";")
+  } 
+  
+  return(df_out)
+}
+
+choose_between_landmark_same_name <- function(df_out){
+  #### Function for strategy of dealing with landmarks with same name, diff loc
+  
+  # 1. If multiple landmarks with same name and a road name, restrict to
+  #    ones close to any road that is mentioned
+  if(nrow(roads_final) >= 1){
+    # Spatial dataframe of landmark candidates
+    df_out_sp <- df_out
+    coordinates(df_out_sp) <- ~lon+lat
+    crs(df_out_sp) <- CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0")
+    
+    # Road shapefile of roads in tweet
+    roads_in_tweet <- roads[roads$name %in% roads_final$matched_words_correct_spelling,]
+    roads_in_tweet$id <- 1
+    roads_in_tweet <- raster::aggregate(roads_in_tweet, by="id")
+    
+    df_out$distance_road_in_tweet <- as.numeric(gDistance(df_out_sp, roads_in_tweet, byid=T)) * 111.12
+    
+    if(TRUE %in% (df_out$distance_road_in_tweet < 0.5)){
+      df_out <- df_out[df_out$distance_road_in_tweet < 0.5,]
+      df_out$how_determined_landmark <- paste(df_out$how_determined_landmark, "restrict_landmarks_close_to_road", sep=";")
+    } else{
+      df_out$how_determined_landmark <- paste(df_out$how_determined_landmark, "tried_restricting_landmarks_close_to_road_but_none_close", sep=";")
+    }
+    
+  }
+  
+  # TODO --- If lower tier preposition, restrict to ones close to those !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  
+  # 2. If multiple landmarks with same name, use one if bus station
+  if(TRUE %in% grepl("bus_station|transit_station|stage_added", df_out$type)){
+    df_out <- df_out[grepl("bus_station|transit_station|stage_added", df_out$type),]
+    df_out$how_determined_landmark <- paste(df_out$how_determined_landmark, "choose_bus_station", sep=";")
+  } 
+  
+  # 3. If multiple landmarks with same name, use one if mall
+  if(TRUE %in% grepl("shopping_mall", df_out$type)){
+    df_out <- df_out[grepl("shopping_mall", df_out$type),]
+    df_out$how_determined_landmark <- paste(df_out$how_determined_landmark, "choose_shopping_mall", sep=";")
+  } 
+  
+  # 3. If multiple landmarks with same name, use one with more types 
+  nrow_before <- nrow(df_out)
+  df_out <- df_out[stri_count(df_out$type, fixed = ";") %in% max(stri_count(df_out$type, fixed = ";")),]
+  nrow_after <- nrow(df_out)
+  if(nrow_before > nrow_after) df_out$how_determined_landmark <- paste(df_out$how_determined_landmark, "choose_landmark_more_types", sep=";")
+  
+  return(df_out)
+}
+
+#### Function for snapping landmark to road
+snap_landmark_to_road <- function(df_out, roads_final){
+  df_out_sp <- df_out
+  coordinates(df_out_sp) <- ~lon+lat
+  crs(df_out_sp) <- CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0")
+  
+  roads_i <- roads[roads$name %in% roads_final$matched_words_correct_spelling,]
+  
+  if((gDistance(df_out_sp, roads_i) * 111.12) < 0.5){
+    df_out_sp_snap <- snapPointsToLines(df_out_sp, 
+                                        as(roads_i, "SpatialLinesDataFrame"), 
+                                        maxDist=1, withAttrs = F, idField=NA)
+    df_out_sp_snap@data <- df_out_sp@data
+    
+    df_out_sp_snap <- as.data.frame(df_out_sp_snap) %>%
+      dplyr::rename(lon = X) %>%
+      dplyr::rename(lat = Y)
+    df_out_sp_snap$how_determined_landmark <- paste(df_out_sp_snap$how_determined_landmark, "snapped_to_road", sep=";")
+  } else{
+    df_out_sp_snap <- df_out
+    df_out_sp_snap$how_determined_landmark <- paste(df_out_sp_snap$how_determined_landmark, "tried_to_snapped_to_road_but_road_too_far", sep=";")
+  }
+  
+  return(df_out_sp_snap)
+  
+}
+
+#### Find other landmarks that might be near road
+find_landmark_similar_name_close_to_road <- function(df_out, roads_final){
+  # Find other landmarks with similar name as landmarks in df_out that might
+  # be near the road. Here, we start with the landmark names in df_out. If
+  # they are far (more than 500 meters) from the mentioned road, this might
+  # suggest that we have the incorrect landmark; the correct location is
+  # probably near the mentioned road. Consequently, we broaden our landmark
+  # search. Note that this step is different from the previous search
+  # as it doesn't imply the landmark came before a preposition. This involves:
+  # 1. Check whether landmark names are part of *any* part of gazetteer entries
+  # 2. Of above landmarks, checks whether they are within 100 meters of mentioned road
+  # 3. If more than one landmark found, check if all close together
+  # 4. If the above conditions don't hold, we stay with the original landmarks
+  
+  df_out_sp <- df_out
+  coordinates(df_out_sp) <- ~lon+lat
+  crs(df_out_sp) <- CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0")
+  
+  roads_i <- roads[roads$name %in% roads_final$matched_words_correct_spelling,]
+  
+  if((gDistance(df_out_sp, roads_i) * 111.12) >= 0.5){
+    
+    #regex_search <- paste0("^", unique(df_out$matched_words_correct_spelling), "\\b") %>% paste(collapse="|")
+    regex_search <- paste0("\\b", unique(df_out$matched_words_correct_spelling), "\\b") %>% paste(collapse="|")
+    
+    landmark_gazetteer_subset <- landmark_gazetteer[grepl(regex_search,landmark_gazetteer$name),]
+    coordinates(landmark_gazetteer_subset) <- ~lon+lat
+    crs(landmark_gazetteer_subset) <- CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0")
+    
+    roads_i$id <- 1
+    roads_i <- aggregate(roads_i, by="id")
+    
+    landmark_gazetteer_subset$distance_road <- as.numeric(gDistance(landmark_gazetteer_subset, roads_i, byid=T) * 111.12)
+    landmark_gazetteer_subset <- landmark_gazetteer_subset[landmark_gazetteer_subset$distance_road <= 0.1,]
+    
+    ##### If multiple close by, use one where mentioned word is at start of landmark
+    # If none start a landmark, don't subset.
+    # E.g., "accident at dbt mombasa rd" , following found: "dbt center" and "moneygram at dbt"; choose "dbt center"
+    regex_search_startstring <- paste0("^", unique(df_out$matched_words_correct_spelling), "\\b") %>% paste(collapse="|")
+    landmark_gazetteer_subset_TEMP <- landmark_gazetteer_subset[grepl(regex_search_startstring,landmark_gazetteer_subset$name),]
+    if(nrow(landmark_gazetteer_subset_TEMP) >= 1) landmark_gazetteer_subset <- landmark_gazetteer_subset_TEMP
+    
+    if(nrow(landmark_gazetteer_subset) >= 1){
+      landmark_gazetteer_subset <- as.data.frame(landmark_gazetteer_subset)
+      
+      ## Maximum distance between coordinates
+      lat_min <- min(landmark_gazetteer_subset$lat)
+      lat_max <- max(landmark_gazetteer_subset$lat)
+      lon_min <- min(landmark_gazetteer_subset$lon)
+      lon_max <- max(landmark_gazetteer_subset$lon)
+      max_dist <- sqrt((lat_max - lat_min)^2 + (lon_max - lon_min)^2)*111.12
+      
+      # SEE IF THERE IS A DOMINANT CLUSTER HERE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! TODO
+      
+      ## If coordinates close
+      if(max_dist <= 0.5){
+        lat_mean <- mean(landmark_gazetteer_subset$lat)
+        lon_mean <- mean(landmark_gazetteer_subset$lon)
+        
+        df_out <- df_out[1,]
+        
+        df_out$lat <- lat_mean
+        df_out$lon <- lon_mean
+        df_out$matched_words_correct_spelling <- paste(c(unique(df_out$matched_words_correct_spelling),unique(landmark_gazetteer_subset$name)), collapse=";")
+        df_out$how_determined_landmark <- paste(df_out$how_determined_landmark, "broadended_landmark_search_found_landmarks_similar_name_near_road", sep=";")
+      }
+    }
+    
+  }
+  
+  return(df_out)
+  
+}
+
+determine_location_from_landmark <- function(df_out, 
+                                             how_determined_text = ""){
+  
+  df_out <- subset(df_out, select=c(matched_words_tweet_spelling, matched_words_correct_spelling)) %>% unique
+  df_out <- merge(df_out, landmark_gazetteer, by.x="matched_words_correct_spelling", by.y="name", all.x=T, all.y=F)
+  
+  df_out$how_determined_landmark <- how_determined_text
+  
+  if(length(unique(df_out$matched_words_correct_spelling)) > 1) df_out <- choose_between_multiple_landmarks(df_out)
+  if(nrow(df_out) > 1) df_out <- choose_between_landmark_same_name(df_out)
+  if(nrow(roads_final) %in% 1) df_out <- find_landmark_similar_name_close_to_road(df_out, roads_final)
+  if(nrow(roads_final) %in% 1) df_out <- snap_landmark_to_road(df_out, roads_final)
+  
+  df_out$type <- "landmark"
+  
+  df_out <- subset(df_out, select=c(lon, lat, matched_words_correct_spelling, matched_words_tweet_spelling, type, how_determined_landmark))
+  
+  return(df_out)
+}
+
+determine_location_from_intersection <- function(df_out, 
+                                                 how_determined_text = ""){
+  
+  df_out$matched_words_correct_spelling <- paste(df_out$road_correct_spelling_1, df_out$road_correct_spelling_2, sep=",")
+  df_out$matched_words_tweet_spelling <- paste(df_out$road_tweet_spelling_1, df_out$road_tweet_spelling_2, sep=",")
+  
+  df_out <- subset(df_out, select=c(lon, lat, matched_words_correct_spelling, matched_words_tweet_spelling))
+  df_out$type <- "intersection"
+  df_out$how_determined_landmark <- how_determined_text
+  
+  return(df_out)
+}
+
+
+
+
+
+
