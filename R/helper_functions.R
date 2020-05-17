@@ -80,6 +80,54 @@ extract_dominant_cluster <- function(sdf,
   return(sdf_out)
 }
 
+restrict_landmarks_by_location <- function(landmark_match,
+                                           landmark_gazetteer,
+                                           sdf,
+                                           dist_thresh = 500){
+  
+  # Subset landmark locations by other locations (eg, roads / areas)
+  
+  ## Spatiall set landmarks
+  landmark_match_sp <- merge(landmark_gazetteer, landmark_match,
+                             by.x = "name",
+                             by.y = "matched_words_correct_spelling",
+                             all.x=F)
+  
+  ## Spatiall prep sdf
+  sdf$id <- 1
+  sdf <- raster::aggregate(sdf, by="id")
+  
+  dist_road <- gDistance(landmark_match_sp, road_match_agg_sp, byid=T) %>% as.numeric()
+  
+  uids_to_remove <- landmark_match_sp$uid[dist_road > dist_thresh]
+  
+  ## If not removing everything, then subset
+  if(length(uids_to_remove) < nrow(landmark_match_sp)){
+    landmark_gazetteer <- landmark_gazetteer[!(landmark_gazetteer$uid %in% uids_to_remove),]
+    
+    landmark_match_sp <- landmark_match_sp[!(landmark_match_sp$uid %in% uids_to_remove),]
+    landmark_match <- landmark_match[landmark_match$matched_words_correct_spelling %in% landmark_match_sp$name,]
+  }
+  
+  return(list(landmark_match = landmark_match,
+              landmark_gazetteer = landmark_gazetteer))
+}
+
+make_point_small_extent <- function(sdf,
+                                    dist_tresh = 500){
+
+  sdf_extent <- extent(sdf)
+  max_extent_dist <- sqrt((sdf_extent@xmin - sdf_extent@xmax)^2 + (sdf_extent@ymin - sdf_extent@ymax)^2)
+  
+  if(max_extent_dist < dist_tresh){
+    sdf <- sdf %>% gCentroid()
+    sdf$id <- 1 # dummy variable to make spatial dataframe
+  }
+  
+  return(sdf)
+}
+
+
 ##### ******************************************************************** #####
 # SEARCHING FOR LOCATIONS ------------------------------------------------------
 phrase_in_sentence_exact <- function(sentence,
