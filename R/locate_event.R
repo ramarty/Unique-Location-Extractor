@@ -50,7 +50,7 @@ if(F){
   # Parameters -----------------------------------------------------------------
   text <- text
   
-  landmarks <- landmark_gazetteer_orig
+  landmark_gazetteer <- landmark_gazetteer_orig
   roads <- roads
   areas <- areas
   
@@ -77,39 +77,40 @@ if(F){
   crs_out <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
   
   # ******* OLD ************************************************************** #
-  
-  # ALGORITHM PARAMETERS
-  fuzzy_match_landmark <- TRUE
-  fuzzy_match_landmark.min.word.length <- c(5,11) # minimum word length for fuzzy match
-  fuzzy_match_landmark.dist <- c(1,2) # maximum levenstein distance to use
-  fuzzy_match_ngram_max <- 3
-  crash_words <- c("accidents", "accident", "crash", "overturn", "collision", "wreck") # hit?
-  junction_words <- c("intersection", "junction")
-  first_letters_same <- TRUE
-  last_letters_same <- TRUE # !!!!!!!! fails for roysambo/u. Maybe: if 1 letter off, only first letter needs to be same. But be more restrictive with 2?
-  
-  projection <- "+init=epsg:21037"
-  
-  prepositions_list <- list(c("at", "next to","around", "just after", "opposite","opp", "apa", "hapa","happened at","just before","at the","outside","right before"),
-                            c("near", "after", "toward","along", "towards", "approach"),
-                            c("past","from","on"))
-  
-  # False positive words are those that frequently appear in tweets that refer to 
-  # something specific, but part of the name refers to a useful location. So 
-  # algorithm thinks is location but is really something else. An example is 
-  # "githurai bus", which refers to a bus that travels to/from githurai -- but
-  # where githurai is also a location.
-  false_positive_phrases <- c("githurai bus", "githurai matatu", 
-                              "githurai 45 bus", "githurai 45 matatu",
-                              "city hoppa bus", "hoppa bus",
-                              "rongai bus", "rongai matatu", "rongai matatus",
-                              "machakos bus", "machakos minibus", "machakos matatu")
+  if(F){
+    # ALGORITHM PARAMETERS
+    fuzzy_match_landmark <- TRUE
+    fuzzy_match.min_word_length <- c(5,11) # minimum word length for fuzzy match
+    fuzzy_match.dist <- c(1,2) # maximum levenstein distance to use
+    fuzzy_match.ngram_max <- 3
+    event_words <- c("accidents", "accident", "crash", "overturn", "collision", "wreck") # hit?
+    junction_words <- c("intersection", "junction")
+    fuzzy_match.first_letters_same <- TRUE
+    fuzzy_match.last_letters_same <- TRUE # !!!!!!!! fails for roysambo/u. Maybe: if 1 letter off, only first letter needs to be same. But be more restrictive with 2?
+    
+    projection <- "+init=epsg:21037"
+    
+    prepositions_list <- list(c("at", "next to","around", "just after", "opposite","opp", "apa", "hapa","happened at","just before","at the","outside","right before"),
+                              c("near", "after", "toward","along", "towards", "approach"),
+                              c("past","from","on"))
+    
+    # False positive words are those that frequently appear in tweets that refer to 
+    # something specific, but part of the name refers to a useful location. So 
+    # algorithm thinks is location but is really something else. An example is 
+    # "githurai bus", which refers to a bus that travels to/from githurai -- but
+    # where githurai is also a location.
+    false_positive_phrases <- c("githurai bus", "githurai matatu", 
+                                "githurai 45 bus", "githurai 45 matatu",
+                                "city hoppa bus", "hoppa bus",
+                                "rongai bus", "rongai matatu", "rongai matatus",
+                                "machakos bus", "machakos minibus", "machakos matatu")
+  }
   
 }
 
 # ALGORITHM NEW ================================================================
 locate_event <- function(text,
-                         landmarks, 
+                         landmark_gazetteer, 
                          roads, 
                          areas, 
                          prepositions_list, 
@@ -117,6 +118,7 @@ locate_event <- function(text,
                          junction_words, 
                          false_positive_phrases, 
                          type_list, 
+                         clost_dist_thresh = 500,
                          fuzzy_match = TRUE,
                          fuzzy_match.min_word_length = c(5,11),
                          fuzzy_match.dist = c(1,2),
@@ -154,17 +156,14 @@ locate_event <- function(text,
   areas_list <- areas$name
   
   prepositions_all <- prepositions_list %>% unlist()
-  #prepositions_list <- c(tier_1_prepositions, tier_2_prepositions)
-  #prepositions_list_all <- c(tier_1_prepositions, tier_2_prepositions, tier_3_prepositions)
-  
+
   ## Add unique ID to gazetteer
   landmark_gazetteer$uid <- 1:nrow(landmark_gazetteer)
   roads$uid              <- 1:nrow(roads)
   areas$uid              <- 1:nrow(areas)
   
   ## Intersection Words
-  intersection_words <- c("intersection", "junction")
-  intersection_words_regex <- paste0("\\b", intersection_words, "\\b") %>% paste(collapse = "|")
+  junction_words_regex <- paste0("\\b", junction_words, "\\b") %>% paste(collapse = "|")
   
   # 3. Clean/Prep Text ---------------------------------------------------------
   # Cleans and preps text
@@ -221,11 +220,11 @@ locate_event <- function(text,
   }
   
   # 4. Implement Algorithm -----------------------------------------------------
-  counter_number <- 1
+  counter_number <<- 1
   
   out_all <- lapply(text,
                     locate_event_i,
-                    landmarks                      = landmarks, 
+                    landmark_gazetteer            = landmark_gazetteer, 
                     roads                          = roads, 
                     areas                          = areas, 
                     prepositions_list              = prepositions_list, 
@@ -233,21 +232,31 @@ locate_event <- function(text,
                     junction_words                 = junction_words, 
                     false_positive_phrases         = false_positive_phrases, 
                     type_list                      = type_list, 
+                    clost_dist_thresh              = clost_dist_thresh,
                     fuzzy_match                    = fuzzy_match,
                     fuzzy_match.min_word_length    = fuzzy_match.min_word_length,
                     fuzzy_match.dist               = fuzzy_match.dist,
                     fuzzy_match.ngram_max          = fuzzy_match.ngram_max,
                     fuzzy_match.first_letters_same = fuzzy_match.first_letters_same,
                     fuzzy_match.last_letters_same  = fuzzy_match.last_letters_same,
+                    crs_distance                   = crs_distance,
                     crs_out                        = crs_out,
-                    quiet                          = quiet) # %>%
-  # [append sf objects]
+                    quiet                          = quiet,
+                    
+                    landmark_list = landmark_list,
+                    roads_list    = roads_list,
+                    areas_list    = areas_list,
+                    prepositions_all = prepositions_all,
+                    junction_words_regex = junction_words_regex) %>%
+    bind_rows_sf()
+  
+  st_crs(out_all) <- crs_out
   
   return(out_all)
 }
 
 locate_event_i <- function(text_i,
-                           landmarks,
+                           landmark_gazetteer,
                            roads,
                            areas,
                            prepositions_list,
@@ -255,44 +264,58 @@ locate_event_i <- function(text_i,
                            junction_words,
                            false_positive_phrases,
                            type_list,
+                           clost_dist_thresh,
                            fuzzy_match,
                            fuzzy_match.min_word_length,
                            fuzzy_match.dist,
                            fuzzy_match.ngram_max,
                            fuzzy_match.first_letters_same,
                            fuzzy_match.last_letters_same,
+                           crs_distance,
                            crs_out,
-                           quiet){
+                           quiet,
+                           
+                           landmark_list,
+                           roads_list,
+                           areas_list,
+                           prepositions_all,
+                           junction_words_regex){
   
   # 1. Determine Location Matches in Gazetteer ---------------------------------
+  if(!quiet) print(text_i)
+  
+  print("Section - 1")
   #### Exact Match
   landmark_match     <- phrase_in_sentence_exact(text_i, landmark_list) 
   road_match         <- phrase_in_sentence_exact(text_i, roads_list)
   area_match <- phrase_in_sentence_exact(text_i, areas_list)
   
   #### Fuzzy
-  if(fuzzy_match_landmark == TRUE){
+  if(fuzzy_match == TRUE){
     landmark_match_fuzzy <- phrase_in_sentence_fuzzy(text_i, 
                                                      landmark_list,
-                                                     fuzzy_match_landmark.min.word.length, 
-                                                     fuzzy_match_landmark.dist, 
-                                                     fuzzy_match_ngram_max,
-                                                     first_letters_same,
-                                                     last_letters_same) 
+                                                     fuzzy_match.min_word_length, 
+                                                     fuzzy_match.dist, 
+                                                     fuzzy_match.ngram_max,
+                                                     fuzzy_match.first_letters_same,
+                                                     fuzzy_match.last_letters_same,
+                                                     c(prepositions_all, event_words, junction_words)) 
     road_match_fuzzy <- phrase_in_sentence_fuzzy(text_i, 
                                                  roads_list,
-                                                 fuzzy_match_landmark.min.word.length, 
-                                                 fuzzy_match_landmark.dist, 
-                                                 fuzzy_match_ngram_max,
-                                                 first_letters_same,
-                                                 last_letters_same) 
+                                                 fuzzy_match.min_word_length, 
+                                                 fuzzy_match.dist, 
+                                                 fuzzy_match.ngram_max,
+                                                 fuzzy_match.first_letters_same,
+                                                 fuzzy_match.last_letters_same,
+                                                 c(prepositions_all, event_words, junction_words)) 
     area_match_fuzzy <- phrase_in_sentence_fuzzy(text_i, 
                                                  areas_list,
-                                                 fuzzy_match_landmark.min.word.length, 
-                                                 fuzzy_match_landmark.dist, 
-                                                 fuzzy_match_ngram_max,
-                                                 first_letters_same,
-                                                 last_letters_same) 
+                                                 fuzzy_match.min_word_length, 
+                                                 fuzzy_match.dist, 
+                                                 fuzzy_match.ngram_max,
+                                                 fuzzy_match.first_letters_same,
+                                                 fuzzy_match.last_letters_same,
+                                                 c(prepositions_all, event_words, junction_words)) 
     
     #### Remove fuzzy match if:
     # (1) Tweet spelling is one word
@@ -336,16 +359,18 @@ locate_event_i <- function(text_i,
   # the same name, and appending and making distict would pick one over the
   # other (?), which we deal with in a separate process.
   locations_in_tweet <- bind_rows(landmark_match, road_match, area_match)
-  
+
   # 2. Landmarks after prepositions --------------------------------------------
-  
+  print("Section - 2")
   # ** 2.1 Subset locations by roads and neighborhood -----------------------------
+  print("Section - 2.1")
   # Before searching for words after landmarks, restrict by roads and neighborhoods.
   # This process restricts the gazetteer, and may make more likely to find a
   # dominant cluster
   
   ## Roads
-  if(nrow(road_match) > 0){
+  # Roads take precedent over landmarks, so OK to do this here.
+  if(nrow(road_match) > 0 & T){
     road_match_sp <- roads[roads$name %in% road_match$matched_words_correct_spelling,]
     
     land_road_restrict <- restrict_landmarks_by_location(landmark_match,
@@ -356,7 +381,10 @@ locate_event_i <- function(text_i,
   }
   
   ## Areas
-  if(nrow(area_match) > 0){
+  # Neighborhoods may not take precedent over landmarks. For example, "garden city"
+  # matches the "garden" and other garden landmarks. Garden city is not near
+  # "garden" estate, so it's removed. 
+  if(nrow(area_match) > 0 & F){
     area_match_sp <- areas[areas$name %in% area_match$matched_words_correct_spelling,]
     
     area_road_restrict <- restrict_landmarks_by_location(landmark_match,
@@ -373,7 +401,7 @@ locate_event_i <- function(text_i,
                 (matched_words_correct_spelling %in% landmark_match$matched_words_correct_spelling)))
   
   # ** 2.2 Preposition Locations --------------------------------------------------
-  
+  print("Section - 2.2")
   # When grabbing landmarks after prepositions we ignore stopwords. So for:
   # "accident near the garden city", we ignore "the" 
   text_i_no_stopwords <- text_i %>% str_replace_all("\\bthe\\b", " ") %>% str_squish
@@ -391,12 +419,14 @@ locate_event_i <- function(text_i,
   prep_locs <- prep_locs_df$word_loc_max %>% unique # vector of locations of prepositions in tweet
   
   # ** 2.3 Extract landmarks ------------------------------------------------------
+  print("Section - 2.3")
   locations_in_tweet_prep <- map_df(prep_locs, 
                                     extract_locations_after_words,
                                     text_i_no_stopwords,
                                     landmark_gazetteer) 
   
   # ** 2.4 Remove if landmark already found ---------------------------------------
+  print("Section - 2.4")
   if(nrow(locations_in_tweet_prep) > 0){
     
     locations_in_tweet_prep <- locations_in_tweet_prep %>%
@@ -414,51 +444,59 @@ locate_event_i <- function(text_i,
     locations_in_tweet <- bind_rows(locations_in_tweet, locations_in_tweet_prep)
   }
   
-  # 3. Location Dataset Prep ---------------------------------------------------
-  # Prep location datasets before continuing with search
+  # 4. Choosing which landmarks to use -----------------------------------------
+  print("Section - 4")
+  df_out <- data.frame(matrix(nrow=1,ncol=0))
   
   ## Original Landmarks
   # Before any subsetting, save locations dataframe. Add all locations originally
   # found as variables in final dataframe.
   locations_in_tweet_original <- locations_in_tweet
   
-  ## Dataset per type
-  # Create dataset for each type
-  landmark_match <- locations_in_tweet[locations_in_tweet$location_type %in% "landmark",]
-  road_match     <- locations_in_tweet[locations_in_tweet$location_type %in% "road",]
-  area_match     <- locations_in_tweet[locations_in_tweet$location_type %in% "area",]
-  
-  ## Locations in tweet
-  # Take area out. By doing this, we allow name conflicts between locations and
-  # areas.
-  locations_in_tweet <- locations_in_tweet[!(locations_in_tweet$location_type %in% "area"),]
-  
-  ## Road shapefile
-  if(nrow(road_match) > 0){
-    road_match_sp <- roads[roads$name %in% road_match$matched_words_correct_spelling,]
-    
-    ## Aggregate roads so one row; makes distance calculations easier
-    road_match_agg_sp <- road_match_sp
-    road_match_agg_sp$id <- 1
-    road_match_agg_sp <- raster::aggregate(road_match_agg_sp, by="id")
-  }
-  
-  ## Areas shapefile
-  if(nrow(area_match) > 0){
-    area_match_sp <- areas[areas$name %in% area_match$matched_words_correct_spelling,]
-    
-    ## Aggregate roads so one row; makes distance calculations easier
-    area_match_agg_sp <- area_match_sp
-    area_match_agg_sp$id <- 1
-    area_match_agg_sp <- raster::aggregate(area_match_agg_sp, by="id")
-  }
-  
-  # 4. Choosing which landmarks to use -----------------------------------------
-  df_out <- data.frame(matrix(nrow=1,ncol=0))
-  
   if(nrow(locations_in_tweet) > 0){
     
-    # ** 4.1 Locations of Words in Tweet ---------------------------------------
+    # ** 4.1 Location Dataset Prep ------------------------------------------------
+    print("Section - 4.1")
+    # Prep location datasets before continuing with search
+    
+
+    ## Dataset per type
+    # Create dataset for each type
+    landmark_match <- locations_in_tweet[locations_in_tweet$location_type %in% "landmark",]
+    road_match     <- locations_in_tweet[locations_in_tweet$location_type %in% "road",]
+    area_match     <- locations_in_tweet[locations_in_tweet$location_type %in% "area",]
+    
+    ## Locations in tweet
+    # Take area out. By doing this, we allow name conflicts between locations and
+    # areas.
+    locations_in_tweet <- locations_in_tweet[!(locations_in_tweet$location_type %in% "area"),]
+    
+    ## Road shapefile
+    if(nrow(road_match) > 0){
+      road_match_sp <- roads[roads$name %in% road_match$matched_words_correct_spelling,]
+      
+      ## Aggregate roads so one row; makes distance calculations easier
+      road_match_agg_sp <- road_match_sp
+      road_match_agg_sp$id <- 1
+      road_match_agg_sp <- raster::aggregate(road_match_agg_sp, by="id")
+    } else{
+      road_match_sp <- NULL # create variable; lateer functions check if null
+    }
+    
+    ## Areas shapefile
+    if(nrow(area_match) > 0){
+      area_match_sp <- areas[areas$name %in% area_match$matched_words_correct_spelling,]
+      
+      ## Aggregate roads so one row; makes distance calculations easier
+      area_match_agg_sp <- area_match_sp
+      area_match_agg_sp$id <- 1
+      area_match_agg_sp <- raster::aggregate(area_match_agg_sp, by="id")
+    } else{
+      area_match_sp <- NULL
+    }
+    
+    # ** 4.2 Locations of Words in Tweet ---------------------------------------
+    print("Section - 4.2")
     #### Locations 
     # Add location of words in tweet to locations_in_tweet dataframe
     word_locations <- lapply(as.character(locations_in_tweet$matched_words_tweet_spelling), phrase_locate, text_i) %>% bind_rows
@@ -472,10 +510,27 @@ locate_event_i <- function(text_i,
     #### Other word types
     # Create dataframes indicating locations of (1) crash words and (2) prepositions
     # in tweets
-    crash_word_locations <- lapply(crash_words, phrase_locate, text_i) %>% bind_rows
+    crash_word_locations <- lapply(event_words, phrase_locate, text_i) %>% bind_rows
     preposition_word_locations <- lapply(prepositions_all, phrase_locate, text_i) %>% bind_rows
     
-    # ** 4.2 Restrict by roads and neighborhood --------------------------------
+    # ** 4.3 Restrict Locations/Landmarks to Consider --------------------------
+    print("Section - 4.3")
+    ## Remove general landmarks
+    rm_gen_out <- remove_general_landmarks(landmark_match,
+                                           landmark_gazetteer,
+                                           road_match_sp)
+    landmark_match     <- rm_gen_out$landmark_match
+    landmark_gazetteer <- rm_gen_out$landmark_gazetteer
+    
+    ## Subset
+    locations_in_tweet <- locations_in_tweet %>%
+      landmark_road_overlap() %>%
+      exact_fuzzy_overlap() %>%
+      phase_overlap() %>%
+      exact_fuzzy_startendsame()
+    
+    # ** 4.4 Restrict by roads and neighborhood --------------------------------
+    print("Section - 4.4")
     ## Roads
     if(nrow(road_match) > 0){
       land_road_restrict <- restrict_landmarks_by_location(landmark_match,
@@ -500,25 +555,12 @@ locate_event_i <- function(text_i,
                ((location_type %in% "landmark") & 
                   (matched_words_correct_spelling %in% landmark_match$matched_words_correct_spelling)))
     
-    # ** 4.3 Restrict Locations/Landmarks to Consider --------------------------
-    ## Remove general landmarks
-    rm_gen_out <- remove_general_landmarks(landmark_match,
-                                           landmark_gazetteer,
-                                           road_match_sp)
-    landmark_match     <- rm_gen_out$landmark_match
-    landmark_gazetteer <- rm_gen_out$landmark_gazetteer
-    
-    ## Subset
-    locations_in_tweet <- locations_in_tweet %>%
-      landmark_road_overlap() %>%
-      exact_fuzzy_overlap() %>%
-      phase_overlap() %>%
-      exact_fuzzy_startendsame()
-    
     # 5. Find Intersections ----------------------------------------------------
-    road_inter_points <- extract_intersections(locations_in_tweet, roads)
+    print("Section - 5")
+    road_intersections <- extract_intersections(locations_in_tweet, roads)
     
     # 6. Add Variables to Location Dataframes ----------------------------------
+    print("Section - 6")
     # Add variables indicating the following:
     #   1. [Crash word] [tier x prepositon] [landmark]
     #   2. [Crash word] [other words] [prepositon] [landmark]
@@ -531,10 +573,10 @@ locate_event_i <- function(text_i,
       
       #### locations_in_tweet dataframe
       locations_in_tweet[[paste0("crashword_prepos_tier_", i)]] <- 
-        search_crashword_prepos(text_i, locations_in_tweet$matched_words_tweet_spelling, crash_words, prepositions)
+        search_crashword_prepos(text_i, locations_in_tweet$matched_words_tweet_spelling, event_words, prepositions)
       
       locations_in_tweet[[paste0("crashword_other_prepos_tier_", i)]] <- 
-        search_crashword_other_prepos(text_i, locations_in_tweet$matched_words_tweet_spelling, crash_words, prepositions)
+        search_crashword_other_prepos(text_i, locations_in_tweet$matched_words_tweet_spelling, event_words, prepositions)
       
       locations_in_tweet[[paste0("prepos_before_crashword_tier_", i)]] <- 
         search_prep_loc(text_i, locations_in_tweet$matched_words_tweet_spelling, prepositions)
@@ -543,12 +585,12 @@ locate_event_i <- function(text_i,
       if(nrow(road_intersections) > 0){
         
         road_intersections[[paste0("crashword_prepos_tier_", i)]] <- 
-          search_crashword_prepos(text_i, road_intersections$road_tweet_spelling_1, crash_words, prepositions) | 
-          search_crashword_prepos(text_i, road_intersections$road_tweet_spelling_2, crash_words, prepositions)
+          search_crashword_prepos(text_i, road_intersections$road_tweet_spelling_1, event_words, prepositions) | 
+          search_crashword_prepos(text_i, road_intersections$road_tweet_spelling_2, event_words, prepositions)
         
         road_intersections[[paste0("crashword_other_prepos_tier_", i)]] <- 
-          search_crashword_other_prepos(text_i, road_intersections$road_tweet_spelling_1, crash_words, prepositions) |
-          search_crashword_other_prepos(text_i, road_intersections$road_tweet_spelling_2, crash_words, prepositions)
+          search_crashword_other_prepos(text_i, road_intersections$road_tweet_spelling_1, event_words, prepositions) |
+          search_crashword_other_prepos(text_i, road_intersections$road_tweet_spelling_2, event_words, prepositions)
         
         road_intersections[[paste0("prepos_before_crashword_tier_", i)]] <- 
           search_prep_loc(text_i, road_intersections$road_tweet_spelling_1, prepositions) |
@@ -558,16 +600,19 @@ locate_event_i <- function(text_i,
     }
     
     # 7. Determine Event Location ----------------------------------------------
+    print("Section - 7")
     
     # ** 7.1 Prep Location Dataframes ---------------------------------------------
+    print("Section - 7.1")
     locations_in_tweet <- locations_in_tweet %>% unique
     
-    neighborhoods_final <- locations_in_tweet[locations_in_tweet$location_type %in% "neighborhood",] %>% unique
+    areas_final <- locations_in_tweet[locations_in_tweet$location_type %in% "areas",] %>% unique
     roads_final <- locations_in_tweet[locations_in_tweet$location_type %in% "road",] %>% unique
     landmarks_final <- locations_in_tweet[locations_in_tweet$location_type %in% "landmark",] %>% unique
     road_intersections_final <- road_intersections 
-    
+  
     # ** 7.2 Landmark Decision Process --------------------------------------------
+    print("Section - 7.2")
     ## Null output
     
     df_out <- data.frame(lat = NA,
@@ -580,6 +625,7 @@ locate_event_i <- function(text_i,
       #       For example, if intersection word and prep_i > 1, then go into intersection?
       
       # **** 7.2.1 Preposition Search: Landmark then Intersection ---------------------
+      print("Section - 7.2.1")
       for(prep_i in 1:length(prepositions_list)){
         for(prep_pattern in c("crashword_prepos_tier_",
                               "crashword_other_prepos_tier_",
@@ -590,7 +636,11 @@ locate_event_i <- function(text_i,
             
             df_out <- determine_location_from_landmark(
               landmarks_final[landmarks_final[[paste0("crashword_prepos_tier_", prep_i)]] %in% TRUE,],
-              paste0("crashword_tier_",prep_i,"_preposition_landmark"))
+              paste0("crashword_tier_",prep_i,"_preposition_landmark"),
+              landmark_gazetteer,
+              roads,
+              roads_final,
+              crs_distance)
             
             loc_searched <- TRUE
           }
@@ -609,9 +659,9 @@ locate_event_i <- function(text_i,
       }
       
       # **** 7.2.2 Intersection Search ------------------------------------------------
-      
+      print("Section - 7.2.2")
       #### If there is an intersection word and more than one intersection
-      if(grepl(intersection_words_regex, tweet) & nrow(road_intersections_final) > 0 & !loc_searched){
+      if(grepl(junction_words_regex, text_i) & nrow(road_intersections_final) > 0 & !loc_searched){
         
         df_out <- determine_location_from_intersection(
           road_intersections_final,
@@ -632,22 +682,28 @@ locate_event_i <- function(text_i,
       }
       
       # **** 7.2.3 Ambiguous Pattern -------------------------------------------
+      print("Section - 7.2.3")
       if(!loc_searched){
-        
+    
         df_out <- determine_location_from_landmark(
           landmarks_final,
-          "landmark_ambiguous_pattern")
-        
+          "landmark_ambiguous_pattern",
+          landmark_gazetteer,
+          roads,
+          roads_final,
+          crs_distance)
+
         loc_searched <- TRUE
         
       }
       
       # **** 7.2.4 Output Cleaning and Checks ---------------------------------------
-      
+      print("Section 7.2.4")
+
       #### Spatially define
       df_out_sp <- df_out 
       coordinates(df_out_sp) <- ~lon+lat
-      crs(df_out_sp) <- CRS(projection)
+      crs(df_out_sp) <- CRS(crs_distance)
       
       #### If dataframe more than one row, collapse to one row
       df_out$id <- 1
@@ -664,12 +720,12 @@ locate_event_i <- function(text_i,
       if(nrow(df_out_sp) > 0){
         coords <- gCentroid(df_out_sp) 
         coords$id <- 1 # dummy variable so if spatial dataframe
-        coords@data <- df_out
+        coords@data <- df_out %>% as.data.frame() # TODO: Check?
         
         df_out <- coords
         
         #### Add distance to mentioned road
-        if(nrow(road_match_sp) > 0){
+        if(!is.null(road_match_sp) > 0){
           df_out$dist_mentioned_road <- gDistance(road_match_agg_sp, df_out) < 500
         }
         
@@ -686,6 +742,8 @@ locate_event_i <- function(text_i,
     if((nrow(roads_final) > 0 | nrow(areas_final) > 0) & !loc_searched){
       
       # ** 7.3 Road and Area ---------------------------------------------------
+      print("Section 7.3")
+      
       # If don't intersect, ignore
       if(nrow(roads_final) > 0 & nrow(areas_final) > 0 & !loc_searched){
         
@@ -706,9 +764,10 @@ locate_event_i <- function(text_i,
       }
       
       # ** 7.4 Road Decision Process ------------------------------------------------
+      print("Section 7.4")
       # If no landmark, output road only if one road
       
-      if(nrow(roads_final) %in% 1 & !loc_searched){
+      if((nrow(roads_final) %in% 1) & !loc_searched){
         
         # Create spatial dataframe of road
         roads_final_sp <- merge(roads, roads_final, by.x="name", by.y="matched_words_correct_spelling", all.x=F)
@@ -731,6 +790,7 @@ locate_event_i <- function(text_i,
       }
       
       # ** 7.5 Area Decision Process -------------------------------------------
+      print("Section 7.5")
       
       if(nrow(areas_final) %in% 1 & !loc_searched){
         
@@ -752,9 +812,8 @@ locate_event_i <- function(text_i,
       
     }
     
-    # ** 7.4 TODO: Estate / Estate + Road Combination ------------------------------
-    
     # 8. Add Variables to Output -----------------------------------------------
+    print("Section - 8")
     
     # 1. Add all location types found
     # 2. Add tweet
@@ -778,10 +837,12 @@ locate_event_i <- function(text_i,
     
   }
   
-  # 9. Clean Spatial Output --------------------------------------------------
+  # 9. Clean Spatial Output ----------------------------------------------------
+  print("Section - 9")
   # If spatial object, reproject and make sf
   if(typeof(df_out) %in% "S4"){
-    df_out <- spTransform(df_out, CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+
+    df_out <- spTransform(df_out, CRS(crs_out))
     df_out <- st_as_sf(df_out)
   } else{
     # If not spatial object, give null geometry

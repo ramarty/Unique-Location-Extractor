@@ -97,7 +97,7 @@ restrict_landmarks_by_location <- function(landmark_match,
   sdf$id <- 1
   sdf <- raster::aggregate(sdf, by="id")
   
-  dist_road <- gDistance(landmark_match_sp, road_match_agg_sp, byid=T) %>% as.numeric()
+  dist_road <- gDistance(landmark_match_sp, sdf, byid=T) %>% as.numeric()
   
   uids_to_remove <- landmark_match_sp$uid[dist_road > dist_thresh]
   
@@ -170,7 +170,8 @@ phrase_in_sentence_fuzzy_i <- function(sentence,
                                        fuzzy_match_landmark.dist,
                                        fuzzy_match_ngram_max,
                                        first_letters_same,
-                                       last_letters_same){
+                                       last_letters_same,
+                                       remove_words){
   # Description: Determine if a word or phrase (ie, ngram) is in a sentence using 
   # a fuzzy match
   # sentence: sentence to examine
@@ -185,11 +186,8 @@ phrase_in_sentence_fuzzy_i <- function(sentence,
   # Remove stop words (replace with other words to preserve fact that words are
   # between other words)
   
-  remove_words_regex <- paste(c(paste0("\\b",tier_1_prepositions,"\\b"),
-                                paste0("\\b",tier_2_prepositions,"\\b"),
-                                paste0("\\b",tier_3_prepositions,"\\b"),
-                                paste0("\\b",crash_words,"\\b"),
-                                paste0("\\b",junction_words,"\\b")), collapse="|")
+  remove_words_regex <- paste(paste0("\\b",remove_words,"\\b"), collapse="|")
+
   sentence <- sentence %>% str_replace_all(remove_words_regex, "thisisafillerwordpleaseignoremore") %>% str_squish
   
   #### Checks
@@ -285,7 +283,8 @@ phrase_in_sentence_fuzzy <- function(text_i,
                                      fuzzy_match_landmark.dist, 
                                      fuzzy_match_ngram_max,
                                      first_letters_same,
-                                     last_letters_same){
+                                     last_letters_same,
+                                     remove_words){
   
   # Implements phrase_in_sentence_fuzzy_i, looping through different
   # values of fuzzy_match_landmark.min.word.length and fuzzy_match_landmark.dist
@@ -297,7 +296,8 @@ phrase_in_sentence_fuzzy <- function(text_i,
                                        fuzzy_match_landmark.dist[i], 
                                        fuzzy_match_ngram_max,
                                        first_letters_same,
-                                       last_letters_same)
+                                       last_letters_same,
+                                       remove_words)
     return(df_i)
   }) %>% 
     bind_rows %>% 
@@ -470,7 +470,7 @@ remove_general_landmarks <- function(landmark_match,
                              all.x=T, all.y=F)
   
   # If there are general landmarks AND roads
-  if(("general" %in% landmark_match_gs$general_specific) & nrow(road_match_sp) > 0){
+  if(("general" %in% landmark_match_gs$general_specific) & !is.null(road_match_sp)){
     
     ## Grab spatial points of general landmarks found in text
     landmark_general_sp <- landmark_gazetteer[(landmark_gazetteer$general_specific %in% "general") &
@@ -765,7 +765,7 @@ search_crashword_other_prepos <- function(text,
     ## Number of words in between
     if(fits_pattern){
       # remove all text after location and before crashword [MIGHT FAIL IF >2 CRASHWORDS]
-      otherwords_numwords <- tweet %>% 
+      otherwords_numwords <- text %>% 
         str_replace_all(paste0("(",location,").*"),"\\1") %>% 
         str_replace_all(paste0(".*(",crash_words_regex,")"),"\\1") %>% 
         str_replace_all(regex_expression,"\\2") %>% 
@@ -791,7 +791,7 @@ search_prep_loc <- function(text, location_words, prepositions){
   TF <- lapply(location_words, function(location){
     regex_expression <- paste0(paste0("(",prepositions_regex,")."),
                                location)
-    fits_pattern <- grepl(regex_expression, tweet)
+    fits_pattern <- grepl(regex_expression, text)
     return(fits_pattern)
   }) %>% unlist
   
@@ -801,32 +801,36 @@ search_prep_loc <- function(text, location_words, prepositions){
 ##### ******************************************************************** #####
 # DETERMINE EVENT LOCATION -----------------------------------------------------
 
-choose_between_multiple_landmarks <- function(df_out){
+choose_between_multiple_landmarks <- function(df_out,
+                                              roads,
+                                              roads_final,
+                                              crs_distance){
   #### Function for strategy of dealing with multiple landmarks (different names)
   
   # 1. Restrict landmarks based on preposition tiers
-  if(TRUE %in% df_out$tier_1_prepos_before_crashword){
-    df_out <- df_out[df_out$tier_1_prepos_before_crashword %in% TRUE,]
-    df_out$how_determined_landmark <- paste(df_out$how_determined_landmark, "restrict_to_tier1_prepositions", sep=";")
-  } else if(TRUE %in% df_out$tier_2_prepos_before_crashword){
-    df_out <- df_out[df_out$tier_2_prepos_before_crashword %in% TRUE,]
-    df_out$how_determined_landmark <- paste(df_out$how_determined_landmark, "restrict_to_tier2_prepositions", sep=";")
-  } else if(TRUE %in% df_out$tier_3_prepos_before_crashword){
-    df_out <- df_out[df_out$tier_3_prepos_before_crashword %in% TRUE,]
-    df_out$how_determined_landmark <- paste(df_out$how_determined_landmark, "restrict_to_tier3_prepositions", sep=";")
-  }
+  # TODO: I don't think needed? Done before enters function.
+  #if(TRUE %in% df_out$tier_1_prepos_before_crashword){
+  #  df_out <- df_out[df_out$tier_1_prepos_before_crashword %in% TRUE,]
+  #  df_out$how_determined_landmark <- paste(df_out$how_determined_landmark, "restrict_to_tier1_prepositions", sep=";")
+  #} else if(TRUE %in% df_out$tier_2_prepos_before_crashword){
+  #  df_out <- df_out[df_out$tier_2_prepos_before_crashword %in% TRUE,]
+  #  df_out$how_determined_landmark <- paste(df_out$how_determined_landmark, "restrict_to_tier2_prepositions", sep=";")
+  #} else if(TRUE %in% df_out$tier_3_prepos_before_crashword){
+  #  df_out <- df_out[df_out$tier_3_prepos_before_crashword %in% TRUE,]
+  #  df_out$how_determined_landmark <- paste(df_out$how_determined_landmark, "restrict_to_tier3_prepositions", sep=";")
+  #}
   
   # 2. If road mentioned, restrict to landmarks near road
   if(nrow(roads_final) > 0){
     df_out_sp <- df_out
     coordinates(df_out_sp) <- ~lon+lat
-    crs(df_out_sp) <- CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0")
+    crs(df_out_sp) <- CRS(crs_distance)
     
     roads_in_tweet <- roads[roads$name %in% roads_final$matched_words_correct_spelling,]
     roads_in_tweet$id <- 1
     roads_in_tweet <- raster::aggregate(roads_in_tweet, by="id")
-    df_out_sp$distance_road <- as.numeric(gDistance(roads_in_tweet, df_out_sp, byid=T)) * 111.12
-    df_out_sp <- df_out_sp[df_out_sp$distance_road < 0.5,]
+    df_out_sp$distance_road <- as.numeric(gDistance(roads_in_tweet, df_out_sp, byid=T)) 
+    df_out_sp <- df_out_sp[df_out_sp$distance_road < 500,]
     
     if(nrow(df_out_sp) > 0){
       df_out <- df_out[df_out$matched_words_correct_spelling %in% df_out_sp$matched_words_correct_spelling,]
@@ -849,7 +853,10 @@ choose_between_multiple_landmarks <- function(df_out){
   return(df_out)
 }
 
-choose_between_landmark_same_name <- function(df_out){
+choose_between_landmark_same_name <- function(df_out,
+                                              roads,
+                                              roads_final,
+                                              crs_distance){
   #### Function for strategy of dealing with landmarks with same name, diff loc
   
   # 1. If multiple landmarks with same name and a road name, restrict to
@@ -858,17 +865,17 @@ choose_between_landmark_same_name <- function(df_out){
     # Spatial dataframe of landmark candidates
     df_out_sp <- df_out
     coordinates(df_out_sp) <- ~lon+lat
-    crs(df_out_sp) <- CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0")
+    crs(df_out_sp) <- CRS(crs_distance)
     
     # Road shapefile of roads in tweet
     roads_in_tweet <- roads[roads$name %in% roads_final$matched_words_correct_spelling,]
     roads_in_tweet$id <- 1
     roads_in_tweet <- raster::aggregate(roads_in_tweet, by="id")
     
-    df_out$distance_road_in_tweet <- as.numeric(gDistance(df_out_sp, roads_in_tweet, byid=T)) * 111.12
+    df_out$distance_road_in_tweet <- as.numeric(gDistance(df_out_sp, roads_in_tweet, byid=T)) 
     
-    if(TRUE %in% (df_out$distance_road_in_tweet < 0.5)){
-      df_out <- df_out[df_out$distance_road_in_tweet < 0.5,]
+    if(TRUE %in% (df_out$distance_road_in_tweet < 500)){
+      df_out <- df_out[df_out$distance_road_in_tweet < 500,]
       df_out$how_determined_landmark <- paste(df_out$how_determined_landmark, "restrict_landmarks_close_to_road", sep=";")
     } else{
       df_out$how_determined_landmark <- paste(df_out$how_determined_landmark, "tried_restricting_landmarks_close_to_road_but_none_close", sep=";")
@@ -900,22 +907,27 @@ choose_between_landmark_same_name <- function(df_out){
 }
 
 #### Function for snapping landmark to road
-snap_landmark_to_road <- function(df_out, roads_final){
+snap_landmark_to_road <- function(df_out, 
+                                  roads,
+                                  roads_final, 
+                                  crs_distance){
+  
   df_out_sp <- df_out
   coordinates(df_out_sp) <- ~lon+lat
-  crs(df_out_sp) <- CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0")
+  crs(df_out_sp) <- CRS(crs_distance)
   
   roads_i <- roads[roads$name %in% roads_final$matched_words_correct_spelling,]
   
-  if((gDistance(df_out_sp, roads_i) * 111.12) < 0.5){
+  if((gDistance(df_out_sp, roads_i)) < 500){
     df_out_sp_snap <- snapPointsToLines(df_out_sp, 
                                         as(roads_i, "SpatialLinesDataFrame"), 
-                                        maxDist=1, withAttrs = F, idField=NA)
+                                        maxDist=999999999, withAttrs = F, idField=NA)
     df_out_sp_snap@data <- df_out_sp@data
     
     df_out_sp_snap <- as.data.frame(df_out_sp_snap) %>%
       dplyr::rename(lon = X) %>%
       dplyr::rename(lat = Y)
+    
     df_out_sp_snap$how_determined_landmark <- paste(df_out_sp_snap$how_determined_landmark, "snapped_to_road", sep=";")
   } else{
     df_out_sp_snap <- df_out
@@ -927,7 +939,10 @@ snap_landmark_to_road <- function(df_out, roads_final){
 }
 
 #### Find other landmarks that might be near road
-find_landmark_similar_name_close_to_road <- function(df_out, roads_final){
+find_landmark_similar_name_close_to_road <- function(df_out, 
+                                                     roads,
+                                                     roads_final,
+                                                     crs_distance){
   # Find other landmarks with similar name as landmarks in df_out that might
   # be near the road. Here, we start with the landmark names in df_out. If
   # they are far (more than 500 meters) from the mentioned road, this might
@@ -942,24 +957,22 @@ find_landmark_similar_name_close_to_road <- function(df_out, roads_final){
   
   df_out_sp <- df_out
   coordinates(df_out_sp) <- ~lon+lat
-  crs(df_out_sp) <- CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0")
+  crs(df_out_sp) <- CRS(crs_distance)
   
   roads_i <- roads[roads$name %in% roads_final$matched_words_correct_spelling,]
   
-  if((gDistance(df_out_sp, roads_i) * 111.12) >= 0.5){
+  if((gDistance(df_out_sp, roads_i)) >= 500){
     
     #regex_search <- paste0("^", unique(df_out$matched_words_correct_spelling), "\\b") %>% paste(collapse="|")
     regex_search <- paste0("\\b", unique(df_out$matched_words_correct_spelling), "\\b") %>% paste(collapse="|")
     
     landmark_gazetteer_subset <- landmark_gazetteer[grepl(regex_search,landmark_gazetteer$name),]
-    coordinates(landmark_gazetteer_subset) <- ~lon+lat
-    crs(landmark_gazetteer_subset) <- CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0")
-    
+
     roads_i$id <- 1
     roads_i <- aggregate(roads_i, by="id")
     
-    landmark_gazetteer_subset$distance_road <- as.numeric(gDistance(landmark_gazetteer_subset, roads_i, byid=T) * 111.12)
-    landmark_gazetteer_subset <- landmark_gazetteer_subset[landmark_gazetteer_subset$distance_road <= 0.1,]
+    landmark_gazetteer_subset$distance_road <- as.numeric(gDistance(landmark_gazetteer_subset, roads_i, byid=T))
+    landmark_gazetteer_subset <- landmark_gazetteer_subset[landmark_gazetteer_subset$distance_road <= 100,]
     
     ##### If multiple close by, use one where mentioned word is at start of landmark
     # If none start a landmark, don't subset.
@@ -976,12 +989,12 @@ find_landmark_similar_name_close_to_road <- function(df_out, roads_final){
       lat_max <- max(landmark_gazetteer_subset$lat)
       lon_min <- min(landmark_gazetteer_subset$lon)
       lon_max <- max(landmark_gazetteer_subset$lon)
-      max_dist <- sqrt((lat_max - lat_min)^2 + (lon_max - lon_min)^2)*111.12
+      max_dist <- sqrt((lat_max - lat_min)^2 + (lon_max - lon_min)^2)
       
       # SEE IF THERE IS A DOMINANT CLUSTER HERE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! TODO
       
       ## If coordinates close
-      if(max_dist <= 0.5){
+      if(max_dist <= 500){
         lat_mean <- mean(landmark_gazetteer_subset$lat)
         lon_mean <- mean(landmark_gazetteer_subset$lon)
         
@@ -1001,17 +1014,21 @@ find_landmark_similar_name_close_to_road <- function(df_out, roads_final){
 }
 
 determine_location_from_landmark <- function(df_out, 
-                                             how_determined_text = ""){
+                                             how_determined_text = "",
+                                             landmark_gazetteer,
+                                             roads,
+                                             roads_final,
+                                             crs_distance){
   
   df_out <- subset(df_out, select=c(matched_words_tweet_spelling, matched_words_correct_spelling)) %>% unique
   df_out <- merge(df_out, landmark_gazetteer, by.x="matched_words_correct_spelling", by.y="name", all.x=T, all.y=F)
   
   df_out$how_determined_landmark <- how_determined_text
   
-  if(length(unique(df_out$matched_words_correct_spelling)) > 1) df_out <- choose_between_multiple_landmarks(df_out)
-  if(nrow(df_out) > 1) df_out <- choose_between_landmark_same_name(df_out)
-  if(nrow(roads_final) %in% 1) df_out <- find_landmark_similar_name_close_to_road(df_out, roads_final)
-  if(nrow(roads_final) %in% 1) df_out <- snap_landmark_to_road(df_out, roads_final)
+  if(length(unique(df_out$matched_words_correct_spelling)) > 1) df_out <- choose_between_multiple_landmarks(df_out, roads, roads_final, crs_distance)
+  if(nrow(df_out) > 1) df_out <- choose_between_landmark_same_name(df_out, roads, roads_final, crs_distance)
+  if(nrow(roads_final) %in% 1) df_out <- find_landmark_similar_name_close_to_road(df_out, roads, roads_final, crs_distance)
+  if(nrow(roads_final) %in% 1) df_out <- snap_landmark_to_road(df_out, roads, roads_final, crs_distance)
   
   df_out$type <- "landmark"
   
