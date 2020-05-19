@@ -43,18 +43,18 @@ intersection just before",size=3,alpha=0.4) +
   geom_polygon(data=area_sub_buff, aes(x=long, y=lat, group=group),
                fill="floralwhite", color="floralwhite", size=0.2) + 
   geom_polygon(data=area_sub, aes(x=long, y=lat, group=group),
-               fill="floralwhite", color="black", size=0.18) + 
+               fill="floralwhite", color="black", size=0.25) + 
   geom_path(data=roads_sub, aes(x=long, y=lat, group=group),
-            color="gray50", size=0.05) + 
+            color="gray50", size=0.025) + 
   geom_point(data=landmarks_sub, aes(x=lon, y=lat),
-             color="red", size=.0025) +
+             color="red", size=.007) +
   geom_point(data=landmarks_sub[10,], aes(x=lon, y=lat),
             color="black",  fill="green", size=2, pch=21) +
   xlim(xmin, xmax) +
   theme_void() +
   theme_transparent() 
 
-sticker(p, package="ULeX", p_color = "black", s_width=2, s_height=1.3,
+sticker(p, package="ULeX", p_color = "black", s_width=2, s_height=1.4,
         s_x = 1,
         p_y=1.5,
         h_fill="floralwhite", h_color="black", filename="~/Documents/Github/Unique-Location-Extractor/man/figures/logo.png")
