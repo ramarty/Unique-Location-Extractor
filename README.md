@@ -6,7 +6,9 @@ Text often contains references to locations that we want to extract. For example
 1. taking advantage of contextual information to identify the relevant locations
 2. ignoring irrelevant location information
 
-This package was originally developed to extract locations of road traffic crashes from reports of crashes via Twitter, specifically in the context of Nairobi, Kenya using the Twitter feed Ma3Route.
+This package was originally developed to extract locations of road traffic crashes from reports of crashes via Twitter, specifically in the context of Nairobi, Kenya using the Twitter feed [Ma3Route](https://twitter.com/Ma3Route?ref_src=twsrc%5Egoogle%7Ctwcamp%5Eserp%7Ctwgr%5Eauthor).
+
+
 
 ## Installation
 
