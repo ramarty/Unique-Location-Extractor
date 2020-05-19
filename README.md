@@ -10,7 +10,7 @@ This package was originally developed to extract locations of road traffic crash
 
 ## Installation
 
-```r
+``` r
 ## Dependencies
 library(magrittr)
 library(lubridate)
