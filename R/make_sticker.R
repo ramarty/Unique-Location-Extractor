@@ -47,7 +47,7 @@ intersection just before",size=3,alpha=0.4) +
   geom_path(data=roads_sub, aes(x=long, y=lat, group=group),
             color="gray50", size=0.025) + 
   geom_point(data=landmarks_sub, aes(x=lon, y=lat),
-             color="red", size=.007) +
+             color="red", size=.015) +
   geom_point(data=landmarks_sub[10,], aes(x=lon, y=lat),
             color="black",  fill="green", size=2, pch=21) +
   xlim(xmin, xmax) +

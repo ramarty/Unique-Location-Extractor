@@ -10,4 +10,9 @@ This package was originally developed to extract locations of road traffic crash
 
 ## Installation
 
+```r
+source("https://raw.githubusercontent.com/ramarty/Unique-Location-Extractor/master/R/helper_functions.R")
+source("https://raw.githubusercontent.com/ramarty/Unique-Location-Extractor/master/R/locate_event.R")
+```
+
 ## Example
