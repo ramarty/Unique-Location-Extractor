@@ -54,7 +54,7 @@ intersection just before",size=3,alpha=0.4) +
   theme_void() +
   theme_transparent() 
 
-sticker(p, package="ULeX", p_color = "black", s_width=2, s_height=1.4,
+sticker(p, package="ULEx", p_color = "black", s_width=2, s_height=1.4,
         s_x = 1,
         p_y=1.5,
         h_fill="floralwhite", h_color="black", filename="~/Documents/Github/Unique-Location-Extractor/man/figures/logo.png")
