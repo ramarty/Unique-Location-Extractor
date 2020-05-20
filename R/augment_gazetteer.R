@@ -13,65 +13,74 @@ library(stringi)
 library(rgeos)
 library(hunspell)
 
-if(F){
-  landmarks <- readRDS(file.path(algorithm_inputs, "gazetteers_raw","merged", "gazetter_allsources_raw.Rds"))
-  landmarks <- landmarks[!is.na(landmarks$lat),]
-  landmarks <- landmarks[1:2000,]
-  coordinates(landmarks) <- ~lon+lat
-  crs(landmarks) <- CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0")
-  
-  landmarks.name_var = "name"
-  landmarks.type_var = "type"
-  skip_grams_first_last_word = T
-  types_remove = c("route", "road", "toilet", "political", "locality", "neighborhood")
-  types_always_keep = c("flyover")
-  names_always_keep = c("flyover")
-  parallel.rm_begin = c(stopwords("en"), c("near","at","the", "towards", "near"))
-  parallel.rm_end = c("bar", "shops", "restaurant","sports bar","hotel", "bus station")
-  parallel.rm_end_iftype = list(list(words = c("stage", "bus stop"), type = "transit_station"))
-  parallel.word_diff_iftype = list(list(words = c("stage", "bus stop", "bus station"), type = "transit_station"))
-  parallel.word_end_addtype = list(list(words = c("stage", "bus stop", "bus station"), type = "add_stage"))
-  rm.contains = c("road", "rd")
-  rm.name_begin = c(stopwords("en"), c("near","at","the", "towards", "near"))
-  rm.name_end = c("highway", "road", "rd", "way", "ave", "avenue", "street", "st")
-  
-  crs_distance <- "+init=epsg:21037"
-}
-
 augment_gazetteer <- function(landmarks,
                               landmarks.name_var = "name",
                               landmarks.type_var = "type",
+                              grams_min_words = 3,
+                              grams_min_words = 6,
                               skip_grams_first_last_word = T,
                               types_remove = c("route", "road", "toilet", "political", "locality", "neighborhood"),
                               types_always_keep = c("flyover"),
                               names_always_keep = c("flyover"),
                               parallel.rm_begin = c(stopwords("en"), c("near","at","the", "towards", "near")),
                               parallel.rm_end = c("bar", "shops", "restaurant","sports bar","hotel", "bus station"),
+                              parallel.rm_begin_iftype = "", # NOT YET IMPLEMENTED
                               parallel.rm_end_iftype = list(list(words = c("stage", "bus stop"), type = "transit_station")),
                               parallel.word_diff_iftype = list(list(words = c("stage", "bus stop", "bus station"), type = "transit_station")),
-                              parallel.word_end_addtype = list(list(words = c("stage", "bus stop", "bus station"), type = "add_stage")),
+                              parallel.word_end_addtype = list(list(words = c("stage", "bus stop", "bus station"), type = "stage")),
                               rm.contains = c("road", "rd"),
                               rm.name_begin = c(stopwords("en"), c("near","at","the", "towards", "near")),
                               rm.name_end = c("highway", "road", "rd", "way", "ave", "avenue", "street", "st"),
                               crs_distance){
   
-  
-  # Augments Gazetteer
+  # DESCRIPTION: Augments landmark gazetteer
+  # ARGS:
   # landmarks: Spatial Points Dataframe (or sf equivalent) of landmarks.
-  # crs_distance: Projection
-  # types_remove: landmark types to remove
-  # types_always_keep: landmark types to always keep. This parameter only
-  #   becomes relevant in cases where a landmark has more than one type. If 
-  #   a landmark has both a "types_remove" and a "types_always_keep" landmark,
-  #   this landmark will be kept.
+  # landmarks.name_var: Name of variable indicating name of landmark
+  # landmarks.type_var: Name of variable indicating type of landmark
+  # grams_min_words: Minimum number of words in name to make n/skip-grams out of name
+  # grams_max_words: Maximum number of words in name to make n/skip-grams out of name/
+  #                  Setting a cap helps to reduce spurious landmarks that may come
+  #                  out of really long names
+  # skip_grams_first_last_word: For skip-grams, should first and last word be the
+  #                             same as the original word? (TRUE/FASLE)
+  # types_remove: If landmark has one of these types, remove - unless 'types_always_keep' 
+  #               or 'names_always_keep' prevents removing.
+  # types_always_keep: landmark types to always keep. This parameter only becomes
+  #                    relevant in cases where a landmark has more than one type.
+  #                    If a landmark has both a "types_remove" and a "types_always_keep" 
+  #                    landmark, this landmark will be kept.
   # names_always_keep: landmark names to always keep. This parameter only
-  #   becomes relevant in cases where a landmark is one of "types_remove." Here,
-  #   we keep the landmark if "names_always_keep" is somewhere in the name. For
-  #   example, if the landmark is a road but has flyover in the name, we may 
-  #   want to keep the landmark as flyovers are small spatial areas.
-  # skip_grams_first_last_word: For skip grams, only keep ones where first and
-  #   last words are included. 
-  
+  #                    becomes relevant in cases where a landmark is one of 
+  #                    "types_remove." Here, we keep the landmark if "names_always_keep" 
+  #                    is somewhere in the name. For example, if the landmark is 
+  #                    a road but has flyover in the name, we may want to keep 
+  #                    the landmark as flyovers are small spatial areas.
+  # parallel.rm_begin: If a landmark name begins with one of these words, add a
+  #                    landmark that excludes the word.
+  # parallel.rm_end: If a landmark name ends with one of these words, add a
+  #                    landmark that excludes the word.
+  # parallel.rm_begin_iftype: If a landmark name begins with one of these words, add a
+  #                           landmark that excludes the word if the landmark is a 
+  #                           certain type.
+  # parallel.rm_end_iftype: If a landmark name ends with one of these words, add a
+  #                         landmark that excludes the word if the landmark is a
+  #                         certain type.
+  # parallel.word_diff_iftype: If the landmark includes one of these words, add a
+  #                            landmarks that swap the word for the other words. 
+  #                            Only do if the landmark is a certain type.
+  # parallel.word_end_addtype: If the landmark ends with one of these words,
+  #                            add the type. For example, if landmark is "X stage",
+  #                            this indicates the landmark is a bus stage. Adding the
+  #                            "stage" to landmark ensures that the type is reflected.
+  # rm.contains: Remove the landmark if it contains one of these words. Implemented 
+  #              after N/skip-grams and parallel landmarks are added.
+  # rm.name_begin: Remove the landmark if it begins with one of these words. Implemented 
+  #              after N/skip-grams and parallel landmarks are added.
+  # rm.name_end: Remov ethe landmark if it ends with one of these words. Implemented 
+  #              after N/skip-grams and parallel landmarks are added.
+  # crs_distance: Coordiante reference system to use for distance calculations.
+
   # 1. Checks ------------------------------------------------------------------
   if(!(class(landmarks)[1] %in% c("SpatialPointsDataFrame", "sf"))){
     stop("landmarks must be a SpatialPointsDataFrame or an sf object")
@@ -125,9 +134,6 @@ augment_gazetteer <- function(landmarks,
   
   # ** 5.1 Create N-Grams and Skip-Grams ---------------------------------------
   
-  N_words.min <- 3
-  N_words.max <- 6
-  
   #### N-grams
   # Only make ngrams if the number of words in the landmark name is between
   # N_words.min and N_words.max. Additionally, only make n-grams of length 2-3.
@@ -135,14 +141,14 @@ augment_gazetteer <- function(landmarks,
   # Grab landmarks to make landmarks from
   landmarks_for_ngrams_df <- landmarks %>%
     as.data.frame() %>%
-    filter(number_words %in% N_words.min:N_words.max)
+    filter(number_words %in% grams_min_words:grams_min_words)
   
   # Make dataframe, where each row is an n-gram, and includes all the other
   # variables from the landmark dataframe (lat, lon, type, etc)
   n_gram_df <- landmarks_for_ngrams_df %>%
     dplyr::pull(name) %>%
     tokens(remove_symbols = F, remove_punct = F) %>% 
-    tokens_ngrams(n=2:3, concatenator = " ") %>%
+    tokens_ngrams(n=2:3, concatenator = " ") %>% # TODO: parameterize 2:3
     lapply(t %>% as.data.frame) %>% 
     bind_rows() %>%
     bind_cols(landmarks_for_ngrams_df) %>%
@@ -157,7 +163,7 @@ augment_gazetteer <- function(landmarks,
   # Grab landmarks to make landmarks from
   landmarks_for_skipgrams_df <- landmarks %>%
     as.data.frame() %>%
-    filter(number_words %in% N_words.min:N_words.max)
+    filter(number_words %in% grams_min_words:grams_min_words)
   
   # Make dataframe, where each row is an n-gram, and includes all the other
   # variables from the landmark dataframe (lat, lon, type, etc)
