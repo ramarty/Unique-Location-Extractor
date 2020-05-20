@@ -1,178 +1,11 @@
 
 
 ##### ******************************************************************** #####
-##### ************* FOR AUGMENT GAZETTEER FUNCTION *************** #####
-##### ******************************************************************** #####
-##### . #####
-
-##### ******************************************************************** #####
-# CLUSTERING -------------------------------------------------------------------
-
-collapse_landmarks_same_name_diff_loc <- function(landmark, df, dist_thresh_km){
-  # Collapse Landmarks Same Name Different Location (sort into general/specific)
-  df_i <- df[df$name %in% landmark,]
-  df_i_nrow <- nrow(df_i)
-  
-  if(nrow(df_i) == 1){
-    df_i$general_specific <- "specific"
-    df_out <- df_i
-    df_out <- df_i@data
-  } else{
-    distance <- gDistance(df_i, byid=T) %>% max / 1000
-    
-    if(distance > dist_thresh_km){
-      df_i$general_specific <- "general"
-      df_i$same_name_max_distance <- distance
-      
-      df_out <- df_i@data
-    } else{
-      
-      types <- strsplit(df_i$type, ";") %>% unlist %>% unique %>% paste(collapse=";")
-      source <- df_i$source %>% unique %>% paste(collapse=";")
-      
-      df_out <- data.frame(name = landmark,
-                           lat = mean(df_i$lat),
-                           lon = mean(df_i$lon),
-                           type = types,
-                           same_name_max_distance = distance,
-                           source = source,
-                           general_specific="specific")
-      
-    }
-  }
-  
-  return(df_out)
-}
-
-multiple_landmarknames_cluster <- function(ngram, 
-                                           landmarks_sp, 
-                                           NGRAM_CLOSE_THRESHOLD, 
-                                           NGRAM_CLOSE_PROPORTION_THRESHOLD, 
-                                           MAX_N_CONSIDER,
-                                           exact_name_match,
-                                           include_general_landmarks){
-  # Captures all landmarks with the same ngram in them. If multiple landmarks,
-  # uses centroid if a large proportion are clustered together. If only one landmark
-  # returns that landmark
-  
-  # NGRAM: ngram to check if in landmarks
-  # landmarks_sp: landmark spatial points data frame
-  # NGRAM_CLOSE_THRESHOLD: Threshold distance to check if landmarks are close together (kilometers)
-  # NGRAM_CLOSE_PROPORTION_THRESHOLD: Threshold proportion of landmark distance that must 
-  # be close together to be considered a 'cluster'
-  # MAX_N_CONSIDER: If many landmarks have the same ngram, function will slow considerable
-  # due to create a large spatial distance matrix. If there are more than
-  # MAX_N_CONSIDER landmarks, returns null dataframe (assumes there is no
-  # dominant cluster) 
-  # exact_name_match: If true, checks for exact name match. If false, uses grepl
-  # include_general_landmarks: If true, returns landmarks that are not close and
-  # where there is no dominant cluster. If false, only returns landmarks that are
-  # either close or are not close but have a dominant cluster
-  
-  #print(ngram)
-  
-  if(exact_name_match){
-    landmarks_with_ngram <- landmarks_sp[landmarks_sp$name %in% ngram,]
-  } else{
-    landmarks_with_ngram <- landmarks_sp[grepl(ngram, landmarks_sp$name),] # stri_detect_fixed
-  }
-  
-  # Blank dataframe unless replaced
-  df_out <- data.frame(NULL)
-  
-  # If multiple landmarks with ngram
-  if(nrow(landmarks_with_ngram) > 1 & nrow(landmarks_with_ngram) <= MAX_N_CONSIDER){
-    
-    # Check if maximum distance is within close together threshold. If it is,
-    # don't need to check clusters (which is computationally slower)
-    max_distance <- sqrt((extent(landmarks_with_ngram)@xmin - extent(landmarks_with_ngram)@xmax)^2 + (extent(landmarks_with_ngram)@ymin - extent(landmarks_with_ngram)@ymax)^2)
-    all_close_together <- (max_distance <= NGRAM_CLOSE_THRESHOLD*1000)
-    
-    if(all_close_together == TRUE){
-      
-      types <- strsplit(landmarks_with_ngram$type, ";") %>% unlist %>% unique %>% paste(collapse=";")
-      source <- landmarks_with_ngram$source %>% unique %>% paste(collapse=";")
-      
-      df_out <- data.frame(name = ngram,
-                           lat = mean(landmarks_with_ngram$lat),
-                           lon = mean(landmarks_with_ngram$lon),
-                           type = types,
-                           same_name_max_distance = max_distance,
-                           same_name_N_landmarks = nrow(landmarks_with_ngram),
-                           same_name_N_landmarks_before_drop = nrow(landmarks_with_ngram),
-                           source = source,
-                           general_specific="specific")
-      
-    } 
-    
-    if(all_close_together == FALSE){
-      
-      landmarks_with_ngram_distances_mat <- gDistance(landmarks_with_ngram, byid=T)
-      landmarks_with_ngram_distances_list <- landmarks_with_ngram_distances_mat %>% as.list %>% unlist
-      cluster_exists <- mean(landmarks_with_ngram_distances_list <= NGRAM_CLOSE_THRESHOLD*1000) > NGRAM_CLOSE_PROPORTION_THRESHOLD
-      
-      if(cluster_exists){
-        
-        landmarks_with_ngram_distances_mat_closeTF <- landmarks_with_ngram_distances_mat
-        landmarks_with_ngram_distances_mat_closeTF <- landmarks_with_ngram_distances_mat_closeTF < NGRAM_CLOSE_THRESHOLD*1000
-        in_dominant_cluster <- (colSums(landmarks_with_ngram_distances_mat_closeTF) / nrow(landmarks_with_ngram_distances_mat_closeTF) > NGRAM_CLOSE_PROPORTION_THRESHOLD)
-        
-        landmarks_with_ngram_cluster <- landmarks_with_ngram[in_dominant_cluster,]
-        
-        types <- strsplit(landmarks_with_ngram_cluster$type, ";") %>% unlist %>% unique %>% paste(collapse=";")
-        source <- landmarks_with_ngram_cluster$source %>% unique %>% paste(collapse=";")
-        
-        df_out <- data.frame(name = ngram,
-                             lat = mean(landmarks_with_ngram_cluster$lat),
-                             lon = mean(landmarks_with_ngram_cluster$lon),
-                             type = types,
-                             same_name_max_distance = max(landmarks_with_ngram_distances_list[landmarks_with_ngram_distances_list < NGRAM_CLOSE_THRESHOLD*1000]),
-                             same_name_N_landmarks = nrow(landmarks_with_ngram_cluster),
-                             same_name_N_landmarks_before_drop = nrow(landmarks_with_ngram),
-                             source = source,
-                             general_specific="specific")
-      } else{
-        
-        if(include_general_landmarks){
-          types <- strsplit(landmarks_with_ngram$type, ";") %>% unlist %>% unique %>% paste(collapse=";")
-          source <- landmarks_with_ngram$source %>% unique %>% paste(collapse=";")
-          
-          df_out <- data.frame(name = ngram,
-                               lat = mean(landmarks_with_ngram$lat),
-                               lon = mean(landmarks_with_ngram$lon),
-                               type = types,
-                               same_name_max_distance = max(landmarks_with_ngram_distances_list),
-                               same_name_N_landmarks = nrow(landmarks_with_ngram),
-                               same_name_N_landmarks_before_drop = nrow(landmarks_with_ngram),
-                               source = source,
-                               general_specific="general") # samename_notclose_nocluster
-        }
-      }
-      
-    }
-  }
-  
-  if(nrow(landmarks_with_ngram) == 1){
-    df_out <- data.frame(name = ngram,
-                         lat = landmarks_with_ngram$lat,
-                         lon = landmarks_with_ngram$lon,
-                         type = landmarks_with_ngram$type,
-                         same_name_max_distance = 0,
-                         same_name_N_landmarks = 1,
-                         source = landmarks_with_ngram$source,
-                         general_specific="specific")
-  }
-  
-  return(df_out)
-}
-
-##### ******************************************************************** #####
-##### ****************** FOR LOCATE EVENT FUNTION ******************* #####
-##### ******************************************************************** #####
-##### . #####
-
-##### ******************************************************************** #####
 # OTHER ------------------------------------------------------------------------
+nrow_0 <- function(df){
+  return(nrow(df) %in% 0)
+} 
+
 bind_rows_sf <- function(...){
   # Description: Bind rows of spatial features
   
@@ -270,8 +103,8 @@ extract_dominant_cluster <- function(sdf,
       
       if(return_general_landmarks %in% "all"){
         sdf$general_specific <- ""
-        sdf[in_dominant_cluster] <- "specific"
-        sdf[!in_dominant_cluster] <- "general"
+        sdf$general_specific[in_dominant_cluster] <- "specific"
+        sdf$general_specific[!in_dominant_cluster] <- "general"
       }
       
       sdf_out <- sdf
