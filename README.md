@@ -44,7 +44,7 @@ source("https://raw.githubusercontent.com/ramarty/Unique-Location-Extractor/mast
 
 The package contains two main functions: `augment_gazetteer` and `locate_event`. The backbone of locating events is looking up location references in a gazetteer, or a geographic dictionary. The `augment_gazetteer` facilitates cleaning a gazetteer that may have been constructed from sources such as Open Street Maps, geonames or Google Maps. It is specifically design to clean point locations or landmarks. The `locate_event` function then uses the gazetteer. `locate_event` takes text as input and returns the location of the relevant event.
 
-### augment_gazetteer
+## augment_gazetteer
 
 ##### Description
 
@@ -57,13 +57,20 @@ The `augment_gazetteer` function adds additional landmarks to account for differ
 
 ##### Parameters
 
-### locate_event
+## locate_event
 
 ##### Description
 
 The `locate_event` function extracts landmarks from text and determines the unique location of events from the text.
 
-To extract locations from tex
+To extract location references from text, the function implements the following steps. Some parts of each step will extract the same landmark so to some extent are redundant; however, they all in some circumstances uniquely add landmarks.
+
+1. Determines whether any text matches names in the gazetteer. Both exact and 'fuzzy' matches (allowing a certain levenstein distance) are used.
+2. Relying on words after prepositions to find locations. The algorithm starts with a word after a preposition and extracts all landmarks that contain that word. Then, the algorithm takes the next word in the text and further subsets the landmarks. This process is repeated until adding a word removes all landmarks. If a road or area (eg, neighborhood) is found in the previous step, only landmarks near that road or neighborhood are considered. Landmarks with the shortest number of words are kept (i.e., if this process finds 5 landmarks with 2 words and 7 landmarks with 3 words, only the 5 landmarks with 2 words are kept).
+3. If a road or area is mentioned and a landmark is not near that road or landmark, longer versions of the landmark that are near the road or area are searched for. For example, if a user says `crash near garden on thika road`, the algorithm may extract multiple landmarks with the name `garden`, none of which are near thika road. It will then search for all landmarks that contain `garden` in them that are near thika road.
+4. If two roads are mentioned, the algorithm extracts the intersection of the roads.
+
+After extracting landmarks, the algorithm chooses the correct landmark using a series of steps. These steps consider a defined list of `event_words` (eg, for road traffic crashes, these could include 'crash', 'accident', 'overturn', etc), a defined list of prepositions
 
 ##### Parameters
 
