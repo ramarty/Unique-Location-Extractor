@@ -10,189 +10,61 @@ library(stringi)
 library(rgeos)
 library(hunspell)
 
-
-# *** Define Helper Functions --------------------------------------------------
-##### Collapse Landmarks Same Name Different Location (sort into general/specific)
-collapse_landmarks_same_name_diff_loc <- function(landmark, df, dist_thresh_km){
-  df_i <- df[df$name %in% landmark,]
-  df_i_nrow <- nrow(df_i)
+if(F){
+  landmarks <- readRDS(file.path(algorithm_inputs, "gazetteers_raw","merged", "gazetter_allsources_raw.Rds"))
+  landmarks <- landmarks[!is.na(landmarks$lat),]
+  coordinates(landmarks) <- ~lon+lat
+  crs(landmarks) <- CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0")
   
-  if(nrow(df_i) == 1){
-    df_i$general_specific <- "specific"
-    df_out <- df_i
-    df_out <- df_i@data
-  } else{
-    distance <- gDistance(df_i, byid=T) %>% max / 1000
-    
-    if(distance > dist_thresh_km){
-      df_i$general_specific <- "general"
-      df_i$same_name_max_distance <- distance
-      
-      df_out <- df_i@data
-    } else{
-      
-      types <- strsplit(df_i$type, ";") %>% unlist %>% unique %>% paste(collapse=";")
-      source <- df_i$source %>% unique %>% paste(collapse=";")
-      
-      df_out <- data.frame(name = landmark,
-                           lat = mean(df_i$lat),
-                           lon = mean(df_i$lon),
-                           type = types,
-                           same_name_max_distance = distance,
-                           source = source,
-                           general_specific="specific")
-      
-    }
-  }
-  
-  return(df_out)
+  crs_distance <- "+init=epsg:21037"
 }
-
-##### Cluster N-Grams
-#ngram <- landmarks_ngrams_skipgrams_nonunique_notclose_sp$name[1]
-#landmarks_sp <- landmarks_ngrams_skipgrams_nonunique_notclose_sp
-#NGRAM_CLOSE_THRESHOLD <- 0.5
-#NGRAM_CLOSE_PROPORTION_THRESHOLD <- 0.8
-#MAX_N_CONSIDER <- 100
-#exact_name_match <- TRUE
-
-multiple_landmarknames_cluster <- function(ngram, 
-                                           landmarks_sp, 
-                                           NGRAM_CLOSE_THRESHOLD, 
-                                           NGRAM_CLOSE_PROPORTION_THRESHOLD, 
-                                           MAX_N_CONSIDER,
-                                           exact_name_match,
-                                           include_general_landmarks){
-  # Captures all landmarks with the same ngram in them. If multiple landmarks,
-  # uses centroid if a large proportion are clustered together. If only one landmark
-  # returns that landmark
-  
-  # NGRAM: ngram to check if in landmarks
-  # landmarks_sp: landmark spatial points data frame
-  # NGRAM_CLOSE_THRESHOLD: Threshold distance to check if landmarks are close together (kilometers)
-  # NGRAM_CLOSE_PROPORTION_THRESHOLD: Threshold proportion of landmark distance that must 
-    # be close together to be considered a 'cluster'
-  # MAX_N_CONSIDER: If many landmarks have the same ngram, function will slow considerable
-    # due to create a large spatial distance matrix. If there are more than
-  # MAX_N_CONSIDER landmarks, returns null dataframe (assumes there is no
-    # dominant cluster) 
-  # exact_name_match: If true, checks for exact name match. If false, uses grepl
-  # include_general_landmarks: If true, returns landmarks that are not close and
-    # where there is no dominant cluster. If false, only returns landmarks that are
-    # either close or are not close but have a dominant cluster
-  
-  #print(ngram)
-  
-  if(exact_name_match){
-    landmarks_with_ngram <- landmarks_sp[landmarks_sp$name %in% ngram,]
-  } else{
-    landmarks_with_ngram <- landmarks_sp[grepl(ngram, landmarks_sp$name),] # stri_detect_fixed
-  }
-
-  # Blank dataframe unless replaced
-  df_out <- data.frame(NULL)
-  
-  # If multiple landmarks with ngram
-  if(nrow(landmarks_with_ngram) > 1 & nrow(landmarks_with_ngram) <= MAX_N_CONSIDER){
-    
-    # Check if maximum distance is within close together threshold. If it is,
-    # don't need to check clusters (which is computationally slower)
-    max_distance <- sqrt((extent(landmarks_with_ngram)@xmin - extent(landmarks_with_ngram)@xmax)^2 + (extent(landmarks_with_ngram)@ymin - extent(landmarks_with_ngram)@ymax)^2)
-    all_close_together <- (max_distance <= NGRAM_CLOSE_THRESHOLD*1000)
-    
-    if(all_close_together == TRUE){
-      
-      types <- strsplit(landmarks_with_ngram$type, ";") %>% unlist %>% unique %>% paste(collapse=";")
-      source <- landmarks_with_ngram$source %>% unique %>% paste(collapse=";")
-      
-      df_out <- data.frame(name = ngram,
-                           lat = mean(landmarks_with_ngram$lat),
-                           lon = mean(landmarks_with_ngram$lon),
-                           type = types,
-                           same_name_max_distance = max_distance,
-                           same_name_N_landmarks = nrow(landmarks_with_ngram),
-                           same_name_N_landmarks_before_drop = nrow(landmarks_with_ngram),
-                           source = source,
-                           general_specific="specific")
-      
-    } 
-    
-    if(all_close_together == FALSE){
-    
-    landmarks_with_ngram_distances_mat <- gDistance(landmarks_with_ngram, byid=T)
-    landmarks_with_ngram_distances_list <- landmarks_with_ngram_distances_mat %>% as.list %>% unlist
-    cluster_exists <- mean(landmarks_with_ngram_distances_list <= NGRAM_CLOSE_THRESHOLD*1000) > NGRAM_CLOSE_PROPORTION_THRESHOLD
-    
-      if(cluster_exists){
-        
-        landmarks_with_ngram_distances_mat_closeTF <- landmarks_with_ngram_distances_mat
-        landmarks_with_ngram_distances_mat_closeTF <- landmarks_with_ngram_distances_mat_closeTF < NGRAM_CLOSE_THRESHOLD*1000
-        in_dominant_cluster <- (colSums(landmarks_with_ngram_distances_mat_closeTF) / nrow(landmarks_with_ngram_distances_mat_closeTF) > NGRAM_CLOSE_PROPORTION_THRESHOLD)
-        
-        landmarks_with_ngram_cluster <- landmarks_with_ngram[in_dominant_cluster,]
-        
-        types <- strsplit(landmarks_with_ngram_cluster$type, ";") %>% unlist %>% unique %>% paste(collapse=";")
-        source <- landmarks_with_ngram_cluster$source %>% unique %>% paste(collapse=";")
-        
-        df_out <- data.frame(name = ngram,
-                             lat = mean(landmarks_with_ngram_cluster$lat),
-                             lon = mean(landmarks_with_ngram_cluster$lon),
-                             type = types,
-                             same_name_max_distance = max(landmarks_with_ngram_distances_list[landmarks_with_ngram_distances_list < NGRAM_CLOSE_THRESHOLD*1000]),
-                             same_name_N_landmarks = nrow(landmarks_with_ngram_cluster),
-                             same_name_N_landmarks_before_drop = nrow(landmarks_with_ngram),
-                             source = source,
-                             general_specific="specific")
-      } else{
-
-        if(include_general_landmarks){
-          types <- strsplit(landmarks_with_ngram$type, ";") %>% unlist %>% unique %>% paste(collapse=";")
-          source <- landmarks_with_ngram$source %>% unique %>% paste(collapse=";")
-          
-          df_out <- data.frame(name = ngram,
-                               lat = mean(landmarks_with_ngram$lat),
-                               lon = mean(landmarks_with_ngram$lon),
-                               type = types,
-                               same_name_max_distance = max(landmarks_with_ngram_distances_list),
-                               same_name_N_landmarks = nrow(landmarks_with_ngram),
-                               same_name_N_landmarks_before_drop = nrow(landmarks_with_ngram),
-                               source = source,
-                               general_specific="general") # samename_notclose_nocluster
-        }
-      }
-    
-    }
-  }
-  
-  if(nrow(landmarks_with_ngram) == 1){
-    df_out <- data.frame(name = ngram,
-                         lat = landmarks_with_ngram$lat,
-                         lon = landmarks_with_ngram$lon,
-                         type = landmarks_with_ngram$type,
-                         same_name_max_distance = 0,
-                         same_name_N_landmarks = 1,
-                         source = landmarks_with_ngram$source,
-                         general_specific="specific")
-  }
-  
-  return(df_out)
-}
-
-# *** Define Main Function =====================================================
+# landmarks <- readRDS(file.path(algorithm_inputs, "gazetteers_raw","merged", "gazetter_allsources_raw.Rds"))
 
 augment_gazetteer <- function(landmarks,
-                              NAIROBI_PROJ,
+                              landmarks.name_var = "name",
+                              landmarks.type_var = "type",
+                              types_remove = c("route", "road", "toilet", "political", "locality", "neighborhood"),
+                              types_always_keep = c("flyover"),
+                              names_always_keep = c("flyover"),
+                              crs_distance,
                               skip_grams_first_last_word,
                               landmarks_to_remove){
   
   # Augments Gazetteer
-  # landmarks: Dataframe of landmarks with the following variables: lat, lon,
-  #   name, type
-  # NAIROBI_PROJ: Projection
+  # landmarks: Spatial Points Dataframe (or sf equivalent) of landmarks.
+  # crs_distance: Projection
+  # types_remove: landmark types to remove
+  # types_always_keep: landmark types to always keep. This parameter only
+  #   becomes relevant in cases where a landmark has more than one type. If 
+  #   a landmark has both a "types_remove" and a "types_always_keep" landmark,
+  #   this landmark will be kept.
+  # names_always_keep: landmark names to always keep. This parameter only
+  #   becomes relevant in cases where a landmark is one of "types_remove." Here,
+  #   we keep the landmark if "names_always_keep" is somewhere in the name. For
+  #   example, if the landmark is a road but has flyover in the name, we may 
+  #   want to keep the landmark as flyovers are small spatial areas.
   # skip_grams_first_last_word: For skip grams, only keep ones where first and
   #   last words are included. 
   
-  # Basic Cleaning ---------------------------------------------------------------
+  # 1. Checks ------------------------------------------------------------------
+  if(!(class(landmarks)[1] %in% c("SpatialPointsDataFrame", "sf"))){
+    stop("landmarks must be a SpatialPointsDataFrame or an sf object")
+  }
+  
+  # 2. Prep landmark object ----------------------------------------------------
+  
+  #### Prep variables
+  landmarks$name <- landmarks[[landmarks.name_var]]
+  landmarks$type <- landmarks[[landmarks.type_var]]
+  landmarks$number_words <- str_count(landmarks$name, "\\S+")
+  landmarks@data <- landmarks@data %>%
+    dplyr::select(name, type, number_words)
+  
+  #### Prep spatial
+  if(class(landmarks)[1] %in% "sf") landmarks <- landmarks %>% as("Spatial")
+  landmarks <- spTransform(landmarks, CRS(crs_distance))
+  
+  # 1. Text Cleaning -----------------------------------------------------------
   # Remove extract whitespace
   landmarks$name_withslash <- landmarks$name %>% 
     str_replace_all("/", " / ") %>%
@@ -209,231 +81,123 @@ augment_gazetteer <- function(landmarks,
     str_replace_all("\\|","") %>%
     str_squish 
   
-  # Remove landmarks with 1 or 0 character lengths
-  landmarks <- landmarks[nchar(landmarks$name) > 1,]
+  # 2. Remove Landmarks --------------------------------------------------------
   
-  # Remove Common English Words --------------------------------------------------
-  # Remove common english words, except in some circumstances
-  #landmarks$correctly_spelled <- hunspell_check(landmarks$name)
+  #### Landmarks must be 2 or more characters
+  landmarks <- landmarks[nchar(landmarks$name) >= 2,]
   
-  #str_count(landmarks$correctly_spelled, "\\S+")
+  #### Remove certain types
+  types_remove_regex      <- types_remove      %>% paste(collapse="|") 
+  types_always_keep_regex <- types_always_keep %>% paste(collapse="|") 
+  names_always_keep_regex <- types_always_keep %>% paste(collapse="|") 
   
-  #unique(landmarks$name[landmarks$correctly_spelled==TRUE])
+  landmarks <- landmarks[!grepl(types_remove_regex, landmarks$type) | 
+                           grepl(types_always_keep_regex, landmarks$type) | 
+                           grepl(names_always_keep_regex, landmarks$name),]
   
+  # 3. N-Grams and Skip-Grams --------------------------------------------------
   
-  # Remove Routes ----------------------------------------------------------------
-  # Remove routes, except if have "flyover" in them as these are typically short
-  route_types <- c("route", "road") %>% paste(collapse="|")
-  landmarks <- landmarks[!(grepl(route_types, landmarks$type) & !grepl("flyover", landmarks$name)),]
+  # ** 3.1 Create N-Grams and Skip-Grams ---------------------------------------
   
-  # Remove certain types of landmarks --------------------------------------------
-  osm_types_remove <- c("toilet")
-  google_types_remove <- c("political", "locality","neighborhood","primary school")
-  geonames_types_remove <- c("toilet") # toilet not in there; just putting something for now TODO
-  types_remove <- c(osm_types_remove, google_types_remove, geonames_types_remove) %>% unique %>% paste(collapse="|")
+  N_words.min <- 3
+  N_words.max <- 6
   
-  landmarks <- landmarks[!grepl(types_remove, landmarks$type),]
+  #### N-grams
+  # Only make ngrams if the number of words in the landmark name is between
+  # N_words.min and N_words.max. Additionally, only make n-grams of length 2-3.
   
-  # Landmarks with Same Name But Different Locations -----------------------------
-  if(F){
-  # Add variable for how many times landmark repeats
-  landmarks <- landmarks %>% 
-    group_by(name) %>% 
-    mutate(count = n()) %>% 
-    as.data.frame
+  # Grab landmarks to make landmarks from
+  landmarks_for_ngrams_df <- landmarks %>%
+    as.data.frame() %>%
+    filter(number_words %in% N_words.min:N_words.max)
   
-  # Landmarks where names don't repeat
-  landmarks_norepeat <- landmarks[landmarks$count == 1,] %>% 
-    mutate(general_specific = "specific")
-  
-  # Collapse landmarks where name repeates
-  landmarks_repeats <- landmarks[landmarks$count > 1,]
-  landmarks_repeats$latitude <- landmarks_repeats$lat
-  landmarks_repeats$longitude <- landmarks_repeats$lon
-  coordinates(landmarks_repeats) <- ~longitude+latitude
-  crs(landmarks_repeats) <- CRS("+init=epsg:4326")
-  landmarks_repeats <- spTransform(landmarks_repeats, CRS(NAIROBI_PROJ))
-  
-  # Collapse Landmarks
-  landmarks_repeats_collapsed <- lapply(unique(landmarks_repeats$name), collapse_landmarks_same_name_diff_loc, landmarks_repeats, 0.2) %>% bind_rows
-  landmarks <- bind_rows(landmarks, landmarks_repeats_collapsed)
-  }
-  
-  # Create N-Grams and Skip Grams ------------------------------------------------
-  #### Function for Parallel Landmarks
-  skipgram_ngram_parallel_landmark <- function(var_i, landmarks_sp_Nword, skip_grams_Nword_df){
-    landmarks_sp_Nword$name <- skip_grams_Nword_df[,var_i] %>% as.character
-    return(landmarks_sp_Nword)
-  }
-  
-  landmarks$number_words <- str_count(landmarks$name, "\\S+")
-  landmarks_3words <- landmarks[landmarks$number_words %in% 3,]
-  landmarks_4words <- landmarks[landmarks$number_words %in% 4,]
-  landmarks_5words <- landmarks[landmarks$number_words %in% 5,]
-  landmarks_6words <- landmarks[landmarks$number_words %in% 6,]
-  
-  #### N-Grams
-  landmarks_3words_ngrams <- landmarks_3words$name %>%
+  # Make dataframe, where each row is an n-gram, and includes all the other
+  # variables from the landmark dataframe (lat, lon, type, etc)
+  n_gram_df <- landmarks_for_ngrams_df %>%
+    dplyr::pull(name) %>%
     tokens(remove_symbols = F, remove_punct = F) %>% 
-    tokens_ngrams(n=2, concatenator = " ")
-  landmarks_3words_ngrams_df <- landmarks_3words_ngrams %>% as.list %>% as.data.frame %>% t
+    tokens_ngrams(n=2:3, concatenator = " ") %>%
+    lapply(t %>% as.data.frame) %>% 
+    bind_rows() %>%
+    bind_cols(landmarks_for_ngrams_df) %>%
+    dplyr::rename(name_original = name) %>%
+    pivot_longer(c(-name_original, -type, -number_words, -lat, -lon),
+                 names_to = "name_iter_N", values_to = "name") %>%
+    filter(!is.na(name)) %>%
+    filter(name != name_original) %>%
+    dplyr::select(-name_iter_N)
   
-  landmarks_4words_ngrams <- landmarks_4words$name %>%
-    tokens(remove_symbols = F, remove_punct = F) %>% 
-    tokens_ngrams(n=2:3, concatenator = " ")
-  landmarks_4words_ngrams_df <- landmarks_4words_ngrams %>% as.list %>% as.data.frame %>% t
+  #### Skip-grams
+  # Grab landmarks to make landmarks from
+  landmarks_for_skipgrams_df <- landmarks %>%
+    as.data.frame() %>%
+    filter(number_words %in% N_words.min:N_words.max)
   
-  landmarks_5words_ngrams <- landmarks_5words$name %>%
-    tokens(remove_symbols = F, remove_punct = F) %>% 
-    tokens_ngrams(n=2:3, concatenator = " ")
-  landmarks_5words_ngrams_df <- landmarks_5words_ngrams %>% as.list %>% as.data.frame %>% t
+  # Make dataframe, where each row is an n-gram, and includes all the other
+  # variables from the landmark dataframe (lat, lon, type, etc)
   
-  landmarks_6words_ngrams <- landmarks_6words$name %>%
-    tokens(remove_symbols = F, remove_punct = F) %>% 
-    tokens_ngrams(n=2:3, concatenator = " ")
-  landmarks_6words_ngrams_df <- landmarks_6words_ngrams %>% as.list %>% as.data.frame %>% t
-  
-  landmarks_3word_parallel_ngrams <- lapply(1:ncol(landmarks_3words_ngrams_df), skipgram_ngram_parallel_landmark, landmarks_3words, landmarks_3words_ngrams_df) %>% bind_rows
-  landmarks_4word_parallel_ngrams <- lapply(1:ncol(landmarks_4words_ngrams_df), skipgram_ngram_parallel_landmark, landmarks_4words, landmarks_4words_ngrams_df) %>% bind_rows
-  landmarks_5word_parallel_ngrams <- lapply(1:ncol(landmarks_5words_ngrams_df), skipgram_ngram_parallel_landmark, landmarks_5words, landmarks_5words_ngrams_df) %>% bind_rows
-  landmarks_6word_parallel_ngrams <- lapply(1:ncol(landmarks_6words_ngrams_df), skipgram_ngram_parallel_landmark, landmarks_6words, landmarks_6words_ngrams_df) %>% bind_rows
-  
-  #### Skip Grams
-  skip_grams_3word <- landmarks_3words$name %>% 
+  skip_gram_df <- landmarks_for_skipgrams_df %>%
+    dplyr::pull(name) %>%
     tokens(remove_symbols = F, remove_punct = F) %>% 
     tokens_skipgrams(n=2:3, 
                      skip=0:4, 
-                     concatenator = " ")
-  skip_grams_3word_df <- skip_grams_3word %>% as.list %>% as.data.frame %>% t
-  if(skip_grams_first_last_word) skip_grams_3word_df <- skip_grams_3word_df[,2] %>% as.data.frame
+                     concatenator = " ") %>%
+    lapply(t %>% as.data.frame) %>% 
+    bind_rows() %>%
+    bind_cols(landmarks_for_skipgrams_df) %>%
+    dplyr::rename(name_original = name) %>%
+    pivot_longer(c(-name_original, -type, -number_words, -lat, -lon),
+                 names_to = "name_iter_N", values_to = "name") %>%
+    filter(!is.na(name)) %>%
+    filter(name != name_original) %>%
+    dplyr::select(-name_iter_N)
   
-  skip_grams_4word <- landmarks_4words$name %>% 
-    tokens(remove_symbols = F, remove_punct = F) %>% 
-    tokens_skipgrams(n=2:3, 
-                     skip=0:4, 
-                     concatenator = " ")
-  skip_grams_4word_df <- skip_grams_4word %>% as.list %>% as.data.frame %>% t
-  if(skip_grams_first_last_word) skip_grams_4word_df <- skip_grams_4word_df[,c(3,8)]
-  
-  skip_grams_5word <- landmarks_5words$name %>% 
-    tokens(remove_symbols = F, remove_punct = F) %>% 
-    tokens_skipgrams(n=2:4, 
-                     skip=0:4, 
-                     concatenator = " ")
-  skip_grams_5word_df <- skip_grams_5word %>% as.list %>% as.data.frame %>% t
-  if(skip_grams_first_last_word) skip_grams_5word_df <- skip_grams_5word_df[,c(4,13,15,16,22,23,24)]
-  
-  skip_grams_6word <- landmarks_6words$name %>% 
-    tokens(remove_symbols = F, remove_punct = F) %>% 
-    tokens_skipgrams(n=2:5, 
-                     skip=0:4, 
-                     concatenator = " ")
-  skip_grams_6word_df <- skip_grams_6word %>% as.list %>% as.data.frame %>% t
-  if(skip_grams_first_last_word) skip_grams_6word_df <- skip_grams_6word_df[,c(5,19,22,24,25,38,40,41,43,44,45,52,53,54,55)]
-  
-  landmarks_3word_parallel_skipgrams <- lapply(1:ncol(skip_grams_3word_df), skipgram_ngram_parallel_landmark, landmarks_3words, skip_grams_3word_df) %>% bind_rows
-  landmarks_4word_parallel_skipgrams <- lapply(1:ncol(skip_grams_4word_df), skipgram_ngram_parallel_landmark, landmarks_4words, skip_grams_4word_df) %>% bind_rows
-  landmarks_5word_parallel_skipgrams <- lapply(1:ncol(skip_grams_5word_df), skipgram_ngram_parallel_landmark, landmarks_5words, skip_grams_5word_df) %>% bind_rows
-  landmarks_6word_parallel_skipgrams <- lapply(1:ncol(skip_grams_6word_df), skipgram_ngram_parallel_landmark, landmarks_6words, skip_grams_6word_df) %>% bind_rows
+  if(skip_grams_first_last_word){
+    skip_gram_df <- skip_gram_df %>%
+      filter(word(name_original,1) == word(name,1),
+             word(name_original,-1) == word(name,-1))
+  }
   
   #### Append
-  landmarks_ngrams_skipgrams <- bind_rows(landmarks_3word_parallel_ngrams,
-                                          landmarks_4word_parallel_ngrams,
-                                          landmarks_5word_parallel_ngrams,
-                                          landmarks_6word_parallel_ngrams,
-                                          landmarks_3word_parallel_skipgrams,
-                                          landmarks_4word_parallel_skipgrams,
-                                          landmarks_5word_parallel_skipgrams,
-                                          landmarks_6word_parallel_skipgrams)
-  
-  # Determine Which N/Skip-Grams to Add to Dictionary ----------------------------
-  #### 1. If n/skip-gram already exists in landmark dictionary, don't include
-  landmarks_ngrams_skipgrams <- landmarks_ngrams_skipgrams[!(landmarks_ngrams_skipgrams$name %in% landmarks$name),]
-  
-  #### 2. Determine whether n/skip-gram is unique or not
-  landmarks_ngrams_skipgrams <- landmarks_ngrams_skipgrams %>%
+  # Append and prep dataframe
+  landmarks_grams <- bind_rows(n_gram_df,
+                               skip_gram_df) %>%
+    unique() %>%
     group_by(name) %>%
-    mutate(name_N = n())
+    mutate(name_N = n()) %>%
+    ungroup()
   
-  #### 3. Grab unique n/skip-grams 
-  landmarks_ngrams_skipgrams_unique <- landmarks_ngrams_skipgrams[landmarks_ngrams_skipgrams$name_N == 1,]
+  coordinates(landmarks_grams) <- ~lon+lat
+  crs(landmarks_grams) <- CRS(crs_distance)
   
-  #### 4. Deal with non-unique skip grams
-  landmarks_ngrams_skipgrams_nonunique <- landmarks_ngrams_skipgrams[landmarks_ngrams_skipgrams$name_N > 1,]
+  # ** 3.2 Determine Which N/Skip-Grams to Add to Dictionary -------------------
   
-  ### 4.1 Remove n/skip-gram if very frequent
-  landmarks_ngrams_skipgrams_nonunique <- landmarks_ngrams_skipgrams_nonunique[landmarks_ngrams_skipgrams_nonunique$name_N <= 100,]
+  #### If two words and one word is one letter, remove
+  remove <- (str_count(landmarks_grams$name, "\\S+") %in% 2) &
+    ((nchar(word(landmarks_grams$name, 1)) %in% 1) |
+    (nchar(word(landmarks_grams$name, -1)) %in% 1))
   
-  ### 4.2 Check min/max lat lon to determine if within threshold distance
-  landmarks_ngrams_skipgrams_nonunique <- as.data.frame(landmarks_ngrams_skipgrams_nonunique)
+  landmarks_grams <- landmarks_grams[!remove,]
   
-  landmarks_ngrams_skipgrams_nonunique_minmaxlatlat <- landmarks_ngrams_skipgrams_nonunique %>%
-    group_by(name, name_N) %>%
-    summarise(lon_min = min(lon),
-              lat_min = min(lat),
-              lon_max = max(lon),
-              lat_max = max(lat))
+  #### Separate into unique/non-unique  
+  # We keep all unique skip grams, then determine which to keep among nonunique grams
+  landmarks_grams_unique    <- landmarks_grams[landmarks_grams$name_N == 1,]
+  landmarks_grams_unique$general_specific <- "specific"
   
-  #landmarks_ngrams_skipgrams_nonunique_minlatlat <- doBy::summaryBy(lon + lat ~ name, data=landmarks_ngrams_skipgrams_nonunique, keep.names=T, FUN=min) %>%
-  #  dplyr::rename(lon_min = lon) %>%
-  #  dplyr::rename(lat_min = lat)
+  landmarks_grams_nonunique <- landmarks_grams[landmarks_grams$name_N > 1,]
   
-  #landmarks_ngrams_skipgrams_nonunique_maxlatlat <- summaryBy(lon+lat+name_N ~ name, data=landmarks_ngrams_skipgrams_nonunique, keep.names=T, FUN=max) %>%
-  #  dplyr::rename(lon_max = lon) %>%
-  #  dplyr::rename(lat_max = lat)
-  
-  #landmarks_ngrams_skipgrams_nonunique_minmaxlatlat <- merge(landmarks_ngrams_skipgrams_nonunique_minlatlat,
-  #                                                    landmarks_ngrams_skipgrams_nonunique_maxlatlat,
-  #                                                    by="name")
-  
-  landmarks_ngrams_skipgrams_nonunique_minmaxlatlat$distance <- sqrt((landmarks_ngrams_skipgrams_nonunique_minmaxlatlat$lon_min -landmarks_ngrams_skipgrams_nonunique_minmaxlatlat$lon_max)^2 +
-                                                                (landmarks_ngrams_skipgrams_nonunique_minmaxlatlat$lat_min - landmarks_ngrams_skipgrams_nonunique_minmaxlatlat$lat_max)^2) * 111.12
-  
-  ### 4.3 Separate: (1) close together, (2) not close together 
-  landmarks_ngrams_skipgrams_nonunique_close <- landmarks_ngrams_skipgrams_nonunique_minmaxlatlat[landmarks_ngrams_skipgrams_nonunique_minmaxlatlat$distance < 0.5,]
-  landmarks_ngrams_skipgrams_nonunique_notclose <- landmarks_ngrams_skipgrams_nonunique_minmaxlatlat[landmarks_ngrams_skipgrams_nonunique_minmaxlatlat$distance >= 0.5,]
-  
-  landmarks_ngrams_skipgrams_nonunique_close_df <- landmarks_ngrams_skipgrams[landmarks_ngrams_skipgrams$name %in% landmarks_ngrams_skipgrams_nonunique_close$name,]
-  landmarks_ngrams_skipgrams_nonunique_notclose_df <- landmarks_ngrams_skipgrams[landmarks_ngrams_skipgrams$name %in% landmarks_ngrams_skipgrams_nonunique_notclose$name,]
-  
-  ### 4.4 If Close together, collapse
-  # Use type, source and other data from one of the landmarks to make code faster
-  landmarks_ngrams_skipgrams_nonunique_close_vars <- landmarks_ngrams_skipgrams_nonunique_close_df[!duplicated(landmarks_ngrams_skipgrams_nonunique_close_df[,c('name')]),]
-  landmarks_ngrams_skipgrams_nonunique_close_vars <- subset(landmarks_ngrams_skipgrams_nonunique_close_vars, select=-c(lat,lon))
-  
-  #landmarks_ngrams_skipgrams_nonunique_close_latlon <- summaryBy(lat+lon ~ name, data=as.data.frame(landmarks_ngrams_skipgrams_nonunique_close_df), keep.names = T, FUN=mean)
-  landmarks_ngrams_skipgrams_nonunique_close_latlon <- landmarks_ngrams_skipgrams_nonunique_close_df %>%
-    as.data.frame() %>%
-    group_by(name) %>%
-    summarise(lat = mean(lat),
-              lon = mean(lon))
-  
-  landmarks_ngrams_skipgrams_nonunique_close <- merge(landmarks_ngrams_skipgrams_nonunique_close_latlon, landmarks_ngrams_skipgrams_nonunique_close_vars, by="name")
-  
-  ### 4.4 If not close and 4 or less landmarks, keep as general
-  landmarks_ngrams_skipgrams_nonunique_notclose_general_df <- landmarks_ngrams_skipgrams_nonunique_notclose_df[landmarks_ngrams_skipgrams_nonunique_notclose_df$name_N < 5,]
-  landmarks_ngrams_skipgrams_nonunique_notclose_general_df$general_specific <- "general"
-  
-  # If two words and one word is one letter, remove
-  remove <- (str_count(landmarks_ngrams_skipgrams_nonunique_notclose_general_df$name, "\\S+") %in% 2) &
-            (nchar(word(landmarks_ngrams_skipgrams_nonunique_notclose_general_df$name, 1)) %in% 1) |
-            (nchar(word(landmarks_ngrams_skipgrams_nonunique_notclose_general_df$name, -1)) %in% 1)
-  landmarks_ngrams_skipgrams_nonunique_notclose_general_df <- landmarks_ngrams_skipgrams_nonunique_notclose_general_df[!remove,]
-  
-  ### 4.5 If not close and 5 or more landmarks, look for dominant clusters
-  landmarks_ngrams_skipgrams_nonunique_notclose_df <- landmarks_ngrams_skipgrams_nonunique_notclose_df[landmarks_ngrams_skipgrams_nonunique_notclose_df$name_N >= 5,]
-  
-  # Extract dominant clusters
-  landmarks_ngrams_skipgrams_nonunique_notclose_sp <- landmarks_ngrams_skipgrams_nonunique_notclose_df
-  landmarks_ngrams_skipgrams_nonunique_notclose_sp$latitude <- landmarks_ngrams_skipgrams_nonunique_notclose_sp$lat
-  landmarks_ngrams_skipgrams_nonunique_notclose_sp$longitude <- landmarks_ngrams_skipgrams_nonunique_notclose_sp$lon
-  coordinates(landmarks_ngrams_skipgrams_nonunique_notclose_sp) <- ~longitude+latitude
-  crs(landmarks_ngrams_skipgrams_nonunique_notclose_sp) <- CRS("+init=epsg:4326")
-  landmarks_ngrams_skipgrams_nonunique_notclose_sp <- spTransform(landmarks_ngrams_skipgrams_nonunique_notclose_sp, CRS(NAIROBI_PROJ))
-  
-  landmarks_ngrams_skipgrams_nonunique_notclose_cluster <- lapply(unique(landmarks_ngrams_skipgrams_nonunique_notclose_sp$name), multiple_landmarknames_cluster, landmarks_ngrams_skipgrams_nonunique_notclose_sp, 0.5, 0.8, 100, TRUE, TRUE) %>% bind_rows
-  
-  ### 4. Append to landmark dictionary
+  #### Amount non-unique, define as general or specific (looking for dominant spatial cluster)
+  landmarks_grams_nonunique_gs <- lapply(unique(landmarks_grams_nonunique$name), function(name){
+    out <- extract_dominant_cluster(landmarks_grams_nonunique[landmarks_grams_nonunique$name %in% name,],
+                             collapse_specific_coords = T,
+                             return_general_landmarks = "all")
+    if(nrow(out) == 0) out <- NULL
+    return(out)
+  }) %>%
+    purrr::discard(is.null) %>%
+    do.call(what="rbind")
+
+  #### Append to landmark dictionary
   landmarks <- bind_rows(landmarks,
                          landmarks_ngrams_skipgrams_unique %>% mutate(general_specific = "specific"),
                          landmarks_ngrams_skipgrams_nonunique_close_df %>% mutate(general_specific = "specific"),
@@ -476,6 +240,10 @@ augment_gazetteer <- function(landmarks,
   parallel.landmarks <- bind_rows(parallel.landmarks, bus.station.replace.with.stage)
   
   # Replace words with "centre" as "center" ------------------------------------
+  
+  landmarks_re <- landmarks[grepl("re$",landmarks$name),]
+  
+  
   df.center <- landmarks[grepl("\\bcenter\\b", landmarks$name),]
   df.center$name <- gsub("center", "centre", df.center$name)
   parallel.landmarks <- bind_rows(parallel.landmarks, df.center)
@@ -488,7 +256,7 @@ augment_gazetteer <- function(landmarks,
   # If ends with certain word/phrase, remove word/phrase -------------------------
   # If ends with words like bar, shops, sports bar, restaurant -- words that people
   # may not use when mentioning landmark --- exclude these words.
-    # \\bword$ indicates: (start of word)(word)(end of line)
+  # \\bword$ indicates: (start of word)(word)(end of line)
   words_remove <- c("bar","shops","restaurant","sports bar","hotel", "bus station") # but bus station probably is just nieghborhood name, so use that.
   words_remove_regex <- paste0("\\b", words_remove, "$") %>% paste(collapse="|")
   
@@ -509,7 +277,7 @@ augment_gazetteer <- function(landmarks,
     df_spread$name <- alt_names
     return(df_spread)  
   }) %>% bind_rows
-    
+  
   parallel.landmarks <- bind_rows(parallel.landmarks, landmarks_with_slash_separated)
   
   # Add parallel landmarks to master landmark list -----------------------------
@@ -521,15 +289,7 @@ augment_gazetteer <- function(landmarks,
   stopwords <- paste0("\\b", stopwords(), "\\b") %>% paste(collapse="|")
   landmarks <- landmarks[!((grepl(stopwords, landmarks$name)) & (str_count(landmarks$name, "\\S+") <= 2)),]
   
-  # Remove extraneous landmarks -------------------------------------------------
-  # One one character, remove
-  #landmarks <- landmarks[nchar(landmarks$name) > 1,]
-  
-  # If two characters and numeric (eg, 56), remove
-  #landmarks_two_characters <- landmarks$name[nchar(landmarks$name) == 2]
-  #landmarks_two_characters_numeric <- landmarks_two_characters[!is.na(as.numeric(landmarks_two_characters))]
-  #landmarks <- landmarks[!(landmarks$name %in% landmarks_two_characters_numeric),]
-  
+
   # Final Cleaning ---------------------------------------------------------------
   landmarks$name <- landmarks$name %>% 
     str_replace_all("/", " / ") %>%
@@ -561,14 +321,15 @@ augment_gazetteer <- function(landmarks,
   landmarks <- unique(landmarks)
   
   # Manually Change Coordinates for Some Locations -------------------------------
-    # This requires local knowledge, but can be guided by algorithm output. Eg, 
-      # are there locations that are wrong very commonly?
-    # Do this for minimal number of locations.
+  # This requires local knowledge, but can be guided by algorithm output. Eg, 
+  # are there locations that are wrong very commonly?
+  # Do this for minimal number of locations.
   
   # JKIA [put along entrance to JKIA, near mombasa rd]
-  landmarks$lat[landmarks$name == "jkia"] <- -1.344459 
-  landmarks$lon[landmarks$name == "jkia"] <- 36.902554
-
+  ###### too specific, do separately.
+  #landmarks$lat[landmarks$name == "jkia"] <- -1.344459 
+  #landmarks$lon[landmarks$name == "jkia"] <- 36.902554
+  
   return(landmarks)
 }
 

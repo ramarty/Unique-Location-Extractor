@@ -21,103 +21,29 @@ library(jsonlite)
 library(maptools)
 library(sf)
 
-# Algorithm Inputs -------------------------------------------------------------
-if(F){
-  
-  text <- "crash near airtel on mombasa rd words words words yaya center kenyatta ave westlands"
-  text_i <- text
-  
-  # Load Data ------------------------------------------------------------------
-  AUG_GAZ <- T
-  
-  if(AUG_GAZ){
-    landmark_gazetteer_orig <- readRDS(file.path(algorithm_inputs, "gazetteers_augmented", "gazetteer_aug.Rds"))
-  } else{
-    landmark_gazetteer_orig <- readRDS(file.path(algorithm_inputs, "gazetteers_raw","merged", "gazetter_allsources_raw.Rds"))
-  }
-  
-  landmark_gazetteer <- landmark_gazetteer_orig
-  landmark_gazetteer <- landmark_gazetteer[!is.na(landmark_gazetteer$lat),]
-  coordinates(landmark_gazetteer) <- ~lon+lat
-  crs(landmark_gazetteer) <- CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0")
-  
-  roads <- readRDS(file.path(algorithm_inputs, "roads_augmented", "osm_roads_aug.Rds"))
-  
-  areas <- readRDS(file.path(algorithm_inputs, "nairobi_estates", "nairobi_estates.Rds"))
-  areas@data <- areas@data %>%
-    dplyr::rename(name = estate)
-  
-  # Parameters -----------------------------------------------------------------
-  text <- text
-  
-  landmark_gazetteer <- landmark_gazetteer_orig
-  roads <- roads
-  areas <- areas
-  
-  preposition_list <- list(c("at", "next to","around", "just after", "opposite","opp", "apa", "hapa","happened at","just before","at the","outside","right before"),
-                           c("near", "after", "toward","along", "towards", "approach"),
-                           c("past","from","on"))
-  event_words <- c("accidents", "accident", "crash", "overturn", "collision", "wreck")
-  junction_words <- c("intersection", "junction")
-  false_positive_phrases <- c("githurai bus", "githurai matatu", 
-                              "githurai 45 bus", "githurai 45 matatu",
-                              "city hoppa bus", "hoppa bus",
-                              "rongai bus", "rongai matatu", "rongai matatus",
-                              "machakos bus", "machakos minibus", "machakos matatu")
-  type_list <- c("")
-  
-  fuzzy_match <- TRUE
-  fuzzy_match.min_word_length <- c(5,11)
-  fuzzy_match.dist <- c(1,2)
-  fuzzy_match.ngram_max <- 3
-  fuzzy_match.first_letters_same <- TRUE
-  fuzzy_match.last_letters_same <- TRUE
-  
-  crs_distance <- "+init=epsg:21037"
-  crs_out <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
-  
-  # ******* OLD ************************************************************** #
-  if(F){
-    # ALGORITHM PARAMETERS
-    fuzzy_match_landmark <- TRUE
-    fuzzy_match.min_word_length <- c(5,11) # minimum word length for fuzzy match
-    fuzzy_match.dist <- c(1,2) # maximum levenstein distance to use
-    fuzzy_match.ngram_max <- 3
-    event_words <- c("accidents", "accident", "crash", "overturn", "collision", "wreck") # hit?
-    junction_words <- c("intersection", "junction")
-    fuzzy_match.first_letters_same <- TRUE
-    fuzzy_match.last_letters_same <- TRUE # !!!!!!!! fails for roysambo/u. Maybe: if 1 letter off, only first letter needs to be same. But be more restrictive with 2?
-    
-    projection <- "+init=epsg:21037"
-    
-    prepositions_list <- list(c("at", "next to","around", "just after", "opposite","opp", "apa", "hapa","happened at","just before","at the","outside","right before"),
-                              c("near", "after", "toward","along", "towards", "approach"),
-                              c("past","from","on"))
-    
-    # False positive words are those that frequently appear in tweets that refer to 
-    # something specific, but part of the name refers to a useful location. So 
-    # algorithm thinks is location but is really something else. An example is 
-    # "githurai bus", which refers to a bus that travels to/from githurai -- but
-    # where githurai is also a location.
-    false_positive_phrases <- c("githurai bus", "githurai matatu", 
-                                "githurai 45 bus", "githurai 45 matatu",
-                                "city hoppa bus", "hoppa bus",
-                                "rongai bus", "rongai matatu", "rongai matatus",
-                                "machakos bus", "machakos minibus", "machakos matatu")
-  }
-  
-}
-
-# ALGORITHM NEW ================================================================
+# locate_event -----------------------------------------------------------------
 locate_event <- function(text,
                          landmark_gazetteer, 
+                         landmark_gazetteer.name_var = "name",
+                         landmark_gazetteer.type_var = "type",
+                         landmark_gazetteer.gs_var = "general_specific",
                          roads, 
+                         roads.name_var = "name",
                          areas, 
-                         prepositions_list, 
-                         event_words, 
-                         junction_words, 
-                         false_positive_phrases, 
-                         type_list, 
+                         areas.name_var = "name",
+                         prepositions_list = list(c("at", "next to","around", 
+                                                    "just after", "opposite","opp", 
+                                                    "apa", "hapa","happened at",
+                                                    "just before","at the","outside",
+                                                    "right before"),
+                                                  c("near", "after", "toward",
+                                                    "along", "towards", "approach"),
+                                                  c("past","from","on")), 
+                         event_words = c("accidents", "accident", "crash", 
+                                         "overturn", "collision", "wreck"), 
+                         junction_words = c("intersection", "junction"), 
+                         false_positive_phrases = "", 
+                         type_list = "", 
                          clost_dist_thresh = 500,
                          fuzzy_match = TRUE,
                          fuzzy_match.min_word_length = c(5,11),
@@ -129,13 +55,80 @@ locate_event <- function(text,
                          crs_out = "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0",
                          quiet = F){
   
+  # DESCRIPTION: Locate a unique event from text. 
+  # ARGS
+  # landmark_gazetteer: SpatialPointsDataframe or SpatialFeatures object with points.
+  # landmark_gazetteer.name_var: Name of variable indicating name of landmark
+  # landmark_gazetteer.type_var: Name of variable indicating type of landmark
+  # landmark_gazetteer.gs_var:   Name of variable indicating whether landmark is general or specific
+  # roads: SpatialLinesDataframe or SpatialFeatures object with lines.
+  # roads.name_var: Name of variable indicating name of road
+  # areas: SpatialPolygonDataframe or SpatialFeatures object with polygons. Represents administrative areas.
+  # areas.name_Var: Name of variable indicating name of area.
+  # prepositions_list: List of p
+  # event_words
+  # junction_words
+  # false_positive_phrases
+  # type_list
+  # crs_distance
+  
   # 1. Checks ------------------------------------------------------------------
   # Check inputs and output errors if anything is wrong.
+  
+  # TODO: Add additional checks and make sure the error messages make sense.
+  
+  if(class(landmark_gazetteer)[1] %in% c("SpatialPointsDataFrame", "sf")){
+    stop("landmark_gazetteer must be a SpatialPointsDataFrame or an sf object")
+  }
+  
+  if(is.null(landmark_gazetteer[[landmark_gazetteer.name_var]])){
+    stop(paste0(landmark_gazetteer.name_var, " is not a variable in landmark_gazetteer"))
+  }
+  
+  if(is.null(landmark_gazetteer[[landmark_gazetteer.type_var]])){
+    stop(paste0(landmark_gazetteer.type_var, " is not a variable in landmark_gazetteer"))
+  }
+  
+  if(is.null(landmark_gazetteer[[general_specific]])){
+    stop(paste0(general_specific, " is not a variable in landmark_gazetteer"))
+  }
+  
+  if(class(roads)[1] %in% c("SpatialPolygonsDataFrame",
+                                         "SpatialLinesDataFrame",
+                                         "sf")){
+    stop("roads must be a spatial object")
+  }
+  
+  if(is.null(roads[[roads.name_var]])){
+    stop(paste0(roads.name_var, " is not a variable in roads"))
+  }
+  
+  if(class(areas)[1] %in% c("SpatialPolygonsDataFrame",
+                            "sf")){
+    stop("roads must be a SpatialPolygonsDataFrame or an sf object")
+  }
+  
+  if(is.null(areas[[areas.name_var]])){
+    stop(paste0(areas.name_var, " is not a variable in areas"))
+  }
   
   if(!is.list(prepositions_list)) stop("prepositions_list must be a list")
   
   # 2. Clean/Prep Input Files --------------------------------------------------
   # Cleans and preps gazetteer and road files
+  
+  #### Add variables
+  landmark_gazetteer$name <- landmark_gazetteer[[landmark_gazetteer.name_var]]
+  landmark_gazetteer$type <- landmark_gazetteer[[landmark_gazetteer.type_var]]
+  landmark_gazetteer$general_specific <- landmark_gazetteer[[landmark_gazetteer.gs_var]]
+  
+  roads$name <- roads[[roads.name_var]]
+  areas$name <- areas[[areas.name_var]]
+  
+  #### Spatial objects -- make sp
+  if(class(landmark_gazetteer)[1] %in% "sf") landmark_gazetteer <- landmark_gazetteer %>% as("Spatial")
+  if(class(roads)[1] %in% "sf") roads <- roads %>% as("Spatial")
+  if(class(areas)[1] %in% "sf") areas <- areas %>% as("Spatial")
   
   #### Project Data
   landmark_gazetteer <- spTransform(landmark_gazetteer, CRS(crs_distance))
@@ -220,7 +213,7 @@ locate_event <- function(text,
   }
   
   # 4. Implement Algorithm -----------------------------------------------------
-  counter_number <<- 1
+  if(!quiet) counter_number <<- 1
   
   out_all <- lapply(text,
                     locate_event_i,
@@ -284,7 +277,7 @@ locate_event_i <- function(text_i,
   # 1. Determine Location Matches in Gazetteer ---------------------------------
   if(!quiet) print(text_i)
   
-  print("Section - 1")
+  if(!quiet) print("Section - 1")
   #### Exact Match
   landmark_match     <- phrase_in_sentence_exact(text_i, landmark_list) 
   road_match         <- phrase_in_sentence_exact(text_i, roads_list)
@@ -361,9 +354,9 @@ locate_event_i <- function(text_i,
   locations_in_tweet <- bind_rows(landmark_match, road_match, area_match)
 
   # 2. Landmarks after prepositions --------------------------------------------
-  print("Section - 2")
+  if(!quiet) print("Section - 2")
   # ** 2.1 Subset locations by roads and neighborhood -----------------------------
-  print("Section - 2.1")
+  if(!quiet) print("Section - 2.1")
   # Before searching for words after landmarks, restrict by roads and neighborhoods.
   # This process restricts the gazetteer, and may make more likely to find a
   # dominant cluster
@@ -401,7 +394,7 @@ locate_event_i <- function(text_i,
                 (matched_words_correct_spelling %in% landmark_match$matched_words_correct_spelling)))
   
   # ** 2.2 Preposition Locations --------------------------------------------------
-  print("Section - 2.2")
+  if(!quiet) print("Section - 2.2")
   # When grabbing landmarks after prepositions we ignore stopwords. So for:
   # "accident near the garden city", we ignore "the" 
   text_i_no_stopwords <- text_i %>% str_replace_all("\\bthe\\b", " ") %>% str_squish
@@ -419,14 +412,14 @@ locate_event_i <- function(text_i,
   prep_locs <- prep_locs_df$word_loc_max %>% unique # vector of locations of prepositions in tweet
   
   # ** 2.3 Extract landmarks ------------------------------------------------------
-  print("Section - 2.3")
+  if(!quiet) print("Section - 2.3")
   locations_in_tweet_prep <- map_df(prep_locs, 
                                     extract_locations_after_words,
                                     text_i_no_stopwords,
                                     landmark_gazetteer) 
   
   # ** 2.4 Remove if landmark already found ---------------------------------------
-  print("Section - 2.4")
+  if(!quiet) print("Section - 2.4")
   if(nrow(locations_in_tweet_prep) > 0){
     
     locations_in_tweet_prep <- locations_in_tweet_prep %>%
@@ -445,7 +438,7 @@ locate_event_i <- function(text_i,
   }
   
   # 4. Choosing which landmarks to use -----------------------------------------
-  print("Section - 4")
+  if(!quiet) print("Section - 4")
   df_out <- data.frame(matrix(nrow=1,ncol=0))
   
   ## Original Landmarks
@@ -456,7 +449,7 @@ locate_event_i <- function(text_i,
   if(nrow(locations_in_tweet) > 0){
     
     # ** 4.1 Location Dataset Prep ------------------------------------------------
-    print("Section - 4.1")
+    if(!quiet) print("Section - 4.1")
     # Prep location datasets before continuing with search
     
 
@@ -496,7 +489,7 @@ locate_event_i <- function(text_i,
     }
     
     # ** 4.2 Locations of Words in Tweet ---------------------------------------
-    print("Section - 4.2")
+    if(!quiet) print("Section - 4.2")
     #### Locations 
     # Add location of words in tweet to locations_in_tweet dataframe
     word_locations <- lapply(as.character(locations_in_tweet$matched_words_tweet_spelling), phrase_locate, text_i) %>% bind_rows
@@ -514,7 +507,7 @@ locate_event_i <- function(text_i,
     preposition_word_locations <- lapply(prepositions_all, phrase_locate, text_i) %>% bind_rows
     
     # ** 4.3 Restrict Locations/Landmarks to Consider --------------------------
-    print("Section - 4.3")
+    if(!quiet) print("Section - 4.3")
     ## Remove general landmarks
     rm_gen_out <- remove_general_landmarks(landmark_match,
                                            landmark_gazetteer,
@@ -530,7 +523,7 @@ locate_event_i <- function(text_i,
       exact_fuzzy_startendsame()
     
     # ** 4.4 Restrict by roads and neighborhood --------------------------------
-    print("Section - 4.4")
+    if(!quiet) print("Section - 4.4")
     ## Roads
     if(nrow(road_match) > 0){
       land_road_restrict <- restrict_landmarks_by_location(landmark_match,
@@ -556,11 +549,11 @@ locate_event_i <- function(text_i,
                   (matched_words_correct_spelling %in% landmark_match$matched_words_correct_spelling)))
     
     # 5. Find Intersections ----------------------------------------------------
-    print("Section - 5")
+    if(!quiet) print("Section - 5")
     road_intersections <- extract_intersections(locations_in_tweet, roads)
     
     # 6. Add Variables to Location Dataframes ----------------------------------
-    print("Section - 6")
+    if(!quiet) print("Section - 6")
     # Add variables indicating the following:
     #   1. [Crash word] [tier x prepositon] [landmark]
     #   2. [Crash word] [other words] [prepositon] [landmark]
@@ -600,10 +593,10 @@ locate_event_i <- function(text_i,
     }
     
     # 7. Determine Event Location ----------------------------------------------
-    print("Section - 7")
+    if(!quiet) print("Section - 7")
     
     # ** 7.1 Prep Location Dataframes ---------------------------------------------
-    print("Section - 7.1")
+    if(!quiet) print("Section - 7.1")
     locations_in_tweet <- locations_in_tweet %>% unique
     
     areas_final <- locations_in_tweet[locations_in_tweet$location_type %in% "areas",] %>% unique
@@ -612,7 +605,7 @@ locate_event_i <- function(text_i,
     road_intersections_final <- road_intersections 
   
     # ** 7.2 Landmark Decision Process --------------------------------------------
-    print("Section - 7.2")
+    if(!quiet) print("Section - 7.2")
     ## Null output
     
     df_out <- data.frame(lat = NA,
@@ -625,7 +618,7 @@ locate_event_i <- function(text_i,
       #       For example, if intersection word and prep_i > 1, then go into intersection?
       
       # **** 7.2.1 Preposition Search: Landmark then Intersection ---------------------
-      print("Section - 7.2.1")
+      if(!quiet) print("Section - 7.2.1")
       for(prep_i in 1:length(prepositions_list)){
         for(prep_pattern in c("crashword_prepos_tier_",
                               "crashword_other_prepos_tier_",
@@ -659,7 +652,7 @@ locate_event_i <- function(text_i,
       }
       
       # **** 7.2.2 Intersection Search ------------------------------------------------
-      print("Section - 7.2.2")
+      if(!quiet) print("Section - 7.2.2")
       #### If there is an intersection word and more than one intersection
       if(grepl(junction_words_regex, text_i) & nrow(road_intersections_final) > 0 & !loc_searched){
         
@@ -682,7 +675,7 @@ locate_event_i <- function(text_i,
       }
       
       # **** 7.2.3 Ambiguous Pattern -------------------------------------------
-      print("Section - 7.2.3")
+      if(!quiet) print("Section - 7.2.3")
       if(!loc_searched){
     
         df_out <- determine_location_from_landmark(
@@ -698,7 +691,7 @@ locate_event_i <- function(text_i,
       }
       
       # **** 7.2.4 Output Cleaning and Checks ---------------------------------------
-      print("Section 7.2.4")
+      if(!quiet) print("Section 7.2.4")
 
       #### Spatially define
       df_out_sp <- df_out 
@@ -742,7 +735,7 @@ locate_event_i <- function(text_i,
     if((nrow(roads_final) > 0 | nrow(areas_final) > 0) & !loc_searched){
       
       # ** 7.3 Road and Area ---------------------------------------------------
-      print("Section 7.3")
+      if(!quiet) print("Section 7.3")
       
       # If don't intersect, ignore
       if(nrow(roads_final) > 0 & nrow(areas_final) > 0 & !loc_searched){
@@ -764,7 +757,7 @@ locate_event_i <- function(text_i,
       }
       
       # ** 7.4 Road Decision Process ------------------------------------------------
-      print("Section 7.4")
+      if(!quiet) print("Section 7.4")
       # If no landmark, output road only if one road
       
       if((nrow(roads_final) %in% 1) & !loc_searched){
@@ -790,7 +783,7 @@ locate_event_i <- function(text_i,
       }
       
       # ** 7.5 Area Decision Process -------------------------------------------
-      print("Section 7.5")
+      if(!quiet) print("Section 7.5")
       
       if(nrow(areas_final) %in% 1 & !loc_searched){
         
@@ -813,7 +806,7 @@ locate_event_i <- function(text_i,
     }
     
     # 8. Add Variables to Output -----------------------------------------------
-    print("Section - 8")
+    if(!quiet) print("Section - 8")
     
     # 1. Add all location types found
     # 2. Add tweet
@@ -838,7 +831,7 @@ locate_event_i <- function(text_i,
   }
   
   # 9. Clean Spatial Output ----------------------------------------------------
-  print("Section - 9")
+  if(!quiet) print("Section - 9")
   # If spatial object, reproject and make sf
   if(typeof(df_out) %in% "S4"){
 
@@ -850,8 +843,8 @@ locate_event_i <- function(text_i,
   }
   
   # Printing to show progress
-  counter_number <<- counter_number + 1
-  print(counter_number)
+  if(!quiet) counter_number <<- counter_number + 1
+  if(!quiet) print(counter_number)
   
   return(df_out)
 }

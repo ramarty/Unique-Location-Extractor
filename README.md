@@ -40,3 +40,9 @@ source("https://raw.githubusercontent.com/ramarty/Unique-Location-Extractor/mast
 ```
 
 ## Example
+
+``` r
+# Have example data, where geospatial is .geojson
+
+
+```
