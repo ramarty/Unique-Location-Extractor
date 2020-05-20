@@ -70,7 +70,13 @@ To extract location references from text, the function implements the following 
 3. If a road or area is mentioned and a landmark is not near that road or landmark, longer versions of the landmark that are near the road or area are searched for. For example, if a user says `crash near garden on thika road`, the algorithm may extract multiple landmarks with the name `garden`, none of which are near thika road. It will then search for all landmarks that contain `garden` in them that are near thika road.
 4. If two roads are mentioned, the algorithm extracts the intersection of the roads.
 
-After extracting landmarks, the algorithm chooses the correct landmark using a series of steps. These steps consider a defined list of `event_words` (eg, for road traffic crashes, these could include 'crash', 'accident', 'overturn', etc), a defined list of prepositions
+After extracting landmarks, the algorithm chooses the correct landmark using a series of steps. These steps consider a defined list of event words (eg, for road traffic crashes, these could include 'crash', 'accident', 'overturn', etc), whether the user mentions a junction word (e.g., 'junction' or 'intersection') and a list of prepositions. Certain prepositions are given precedent over others to distinguish between locations indicating the location of an event versus locations further away that provide additional context; for example, `at` takes higher precedence that `towards`. The following main series of steps are used in the following order
+
+1. Locations that follow the pattern [even word] [preposition] [location] are extracted.
+2. Locations that follow the pattern [preposition] [location] are extracted. If multiple occurrences, the location near the higher order preposition is used. If a tie, the location closest to the event word is used. TODO: parameterize which should be prioritized: (1) location to event word or (2) preposition priority. Which one should we default and which should be tie-breaker? Not obvious, for example: `accident towards thika mall at garden city`.
+3. If a junction word is used, two roads are mentioned, and the two roads intersect once, the intersection point is used.
+4. The location closest to the event word is used.
+5. If a landmark is not found, but a road or area are found, the road or area are returned. If a road and area are mentioned, the intersection of the road and area is returned.
 
 ##### Parameters
 
