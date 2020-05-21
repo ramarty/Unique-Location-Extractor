@@ -39,7 +39,7 @@ augment_gazetteer <- function(landmarks,
   # landmarks.name_var: Name of variable indicating name of landmark
   # landmarks.type_var: Name of variable indicating type of landmark
   # grams_min_words: Minimum number of words in name to make n/skip-grams out of name
-  # grams_max_words: Maximum number of words in name to make n/skip-grams out of name/
+  # grams_max_words: Maximum number of words in name to make n/skip-grams out of name.
   #                  Setting a cap helps to reduce spurious landmarks that may come
   #                  out of really long names
   # skip_grams_first_last_word: For skip-grams, should first and last word be the

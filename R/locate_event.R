@@ -43,7 +43,7 @@ locate_event <- function(text,
                                          "overturn", "collision", "wreck"), 
                          junction_words = c("intersection", "junction"), 
                          false_positive_phrases = "", 
-                         type_list = "", 
+                         type_list = "", # NOT IMPLEMENTED YET
                          clost_dist_thresh = 500,
                          fuzzy_match = TRUE,
                          fuzzy_match.min_word_length = c(5,11),
@@ -64,14 +64,35 @@ locate_event <- function(text,
   # roads: SpatialLinesDataframe or SpatialFeatures object with lines.
   # roads.name_var: Name of variable indicating name of road
   # areas: SpatialPolygonDataframe or SpatialFeatures object with polygons. Represents administrative areas.
-  # areas.name_Var: Name of variable indicating name of area.
-  # prepositions_list: List of p
-  # event_words
-  # junction_words
-  # false_positive_phrases
-  # type_list
-  # crs_distance
+  # areas.name_var: Name of variable indicating name of area.
+  # prepositions_list: List of vectors of prepositions. Order of list determines order or prepsoition precedence. 
+  # event_words: Vector of event words.
+  # junction_words: Vector of junction words.
+  # false_positive_phrases: Common words found in text that include spurious 
+  #                         location references (eg, githurai bus is the name of a bus)
+  #                         that includes the location githurai. This is common enough
+  #                         that we should look for and remove.
+  # type_list: List of vectors of types. Order of list determines order or type precedence. 
+  # clost_dist_thresh: Distance (meters) as to what is considered "close" (eg, is the landmark "close" to a road?)
+  # fuzzy_match: Whether to implement fuzzy matching of landmarks using levenstein distance.
   
+  # TODO: Combine these two into one... eg, a list?
+  # fuzzy_match.min_word_length: Minimum word length to use fuzzy/levenstein distance for matching.
+  # fuzzy_match.dist: Allowable levenstein distances. Vector length must be same as above vector.
+  
+  # fuzzy_match.ngram_max: The number of n-grams that should be extracted from text
+  #   to calculate a levensteing distance against landmarks. For example, if the text is 
+  #   composed of 5 words: w1 w2 w3 w4 and fuzzy_match.ngram_max=3, the function extracts
+  #   [w1 w2 w3] and compares the levenstein distance to all landmarks. Then in checks 
+  #   [w2 w3 w4], etc.
+  # fuzzy_match.first_letters_same: When implementing a fuzzy match, should the first 
+  #                                 letter of the original and found word be the same?
+  # fuzzy_match.last_letters_same: When implementing a fuzzy match, should the last 
+  #                                 letter of the original and found word be the same?
+  # crs_distance: Coordinate reference system to calculate distances. Should be projected.
+  # crs_out: Coordinate reference system for output. 
+  # quiet: If TRUE, lets user know how far along the algorithm is. 
+
   # 1. Checks ------------------------------------------------------------------
   # Check inputs and output errors if anything is wrong.
   

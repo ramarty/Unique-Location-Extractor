@@ -57,35 +57,11 @@ The `augment_gazetteer` function adds additional landmarks to account for differ
 
 ##### Parameters
 
-## locate_event
-
-##### Description
-
-The `locate_event` function extracts landmarks from text and determines the unique location of events from the text.
-
-To extract location references from text, the function implements the following steps. Some parts of each step will extract the same landmark so to some extent are redundant; however, they all in some circumstances uniquely add landmarks.
-
-1. Determines whether any text matches names in the gazetteer. Both exact and 'fuzzy' matches (allowing a certain levenstein distance) are used.
-2. Relying on words after prepositions to find locations. The algorithm starts with a word after a preposition and extracts all landmarks that contain that word. Then, the algorithm takes the next word in the text and further subsets the landmarks. This process is repeated until adding a word removes all landmarks. If a road or area (eg, neighborhood) is found in the previous step, only landmarks near that road or neighborhood are considered. Landmarks with the shortest number of words are kept (i.e., if this process finds 5 landmarks with 2 words and 7 landmarks with 3 words, only the 5 landmarks with 2 words are kept).
-3. If a road or area is mentioned and a landmark is not near that road or landmark, longer versions of the landmark that are near the road or area are searched for. For example, if a user says `crash near garden on thika road`, the algorithm may extract multiple landmarks with the name `garden`, none of which are near thika road. It will then search for all landmarks that contain `garden` in them that are near thika road.
-4. If two roads are mentioned, the algorithm extracts the intersection of the roads.
-
-After extracting landmarks, the algorithm chooses the correct landmark using a series of steps. These steps consider a defined list of event words (eg, for road traffic crashes, these could include 'crash', 'accident', 'overturn', etc), whether the user mentions a junction word (e.g., 'junction' or 'intersection') and a list of prepositions. Certain prepositions are given precedent over others to distinguish between locations indicating the location of an event versus locations further away that provide additional context; for example, `at` takes higher precedence that `towards`. The following main series of steps are used in the following order
-
-1. Locations that follow the pattern [even word] [preposition] [location] are extracted.
-2. Locations that follow the pattern [preposition] [location] are extracted. If multiple occurrences, the location near the higher order preposition is used. If a tie, the location closest to the event word is used. TODO: parameterize which should be prioritized: (1) location to event word or (2) preposition priority. Which one should we default and which should be tie-breaker? Not obvious, for example: `accident towards thika mall at garden city`.
-3. If a junction word is used, two roads are mentioned, and the two roads intersect once, the intersection point is used.
-4. The location closest to the event word is used.
-5. If the location name has multiple locations, we (1) restrict to locations near any mentioned road or area, (2) check for a dominant cluster of locations and (3) prioritize certain landmark types over others (e.g., a user is more likely to reference a large, well known location type like a stadium).
-6. If a landmark is not found, but a road or area are found, the road or area are returned. If a road and area are mentioned, the intersection of the road and area is returned.
-
-##### Parameters
-
 * __landmarks:__ Spatial Points Dataframe (or sf equivalent) of landmarks.
 * __landmarks.name_var:__ Name of variable indicating name of landmark
 * __landmarks.type_var:__ Name of variable indicating type of landmark
 * __grams_min_words:__ Minimum number of words in name to make n/skip-grams out of name
-* __grams_max_words:__ Maximum number of words in name to make n/skip-grams out of name/
+* __grams_max_words:__ Maximum number of words in name to make n/skip-grams out of name.
                   Setting a cap helps to reduce spurious landmarks that may come
                   out of really long names
 * __skip_grams_first_last_word:__ For skip-grams, should first and last word be the
@@ -127,6 +103,63 @@ After extracting landmarks, the algorithm chooses the correct landmark using a s
               after N/skip-grams and parallel landmarks are added.
 * __crs_distance:__ Coordiante reference system to use for distance calculations.
 
+## locate_event
+
+##### Description
+
+The `locate_event` function extracts landmarks from text and determines the unique location of events from the text.
+
+To extract location references from text, the function implements the following steps. Some parts of each step will extract the same landmark so to some extent are redundant; however, they all in some circumstances uniquely add landmarks.
+
+1. Determines whether any text matches names in the gazetteer. Both exact and 'fuzzy' matches (allowing a certain levenstein distance) are used.
+2. Relying on words after prepositions to find locations. The algorithm starts with a word after a preposition and extracts all landmarks that contain that word. Then, the algorithm takes the next word in the text and further subsets the landmarks. This process is repeated until adding a word removes all landmarks. If a road or area (eg, neighborhood) is found in the previous step, only landmarks near that road or neighborhood are considered. Landmarks with the shortest number of words are kept (i.e., if this process finds 5 landmarks with 2 words and 7 landmarks with 3 words, only the 5 landmarks with 2 words are kept).
+3. If a road or area is mentioned and a landmark is not near that road or landmark, longer versions of the landmark that are near the road or area are searched for. For example, if a user says `crash near garden on thika road`, the algorithm may extract multiple landmarks with the name `garden`, none of which are near thika road. It will then search for all landmarks that contain `garden` in them that are near thika road.
+4. If two roads are mentioned, the algorithm extracts the intersection of the roads.
+
+After extracting landmarks, the algorithm chooses the correct landmark using a series of steps. These steps consider a defined list of event words (eg, for road traffic crashes, these could include 'crash', 'accident', 'overturn', etc), whether the user mentions a junction word (e.g., 'junction' or 'intersection') and a list of prepositions. Certain prepositions are given precedent over others to distinguish between locations indicating the location of an event versus locations further away that provide additional context; for example, `at` takes higher precedence that `towards`. The following main series of steps are used in the following order
+
+1. Locations that follow the pattern [even word] [preposition] [location] are extracted.
+2. Locations that follow the pattern [preposition] [location] are extracted. If multiple occurrences, the location near the higher order preposition is used. If a tie, the location closest to the event word is used. TODO: parameterize which should be prioritized: (1) location to event word or (2) preposition priority. Which one should we default and which should be tie-breaker? Not obvious, for example: `accident towards thika mall at garden city`.
+3. If a junction word is used, two roads are mentioned, and the two roads intersect once, the intersection point is used.
+4. The location closest to the event word is used.
+5. If the location name has multiple locations, we (1) restrict to locations near any mentioned road or area, (2) check for a dominant cluster of locations and (3) prioritize certain landmark types over others (e.g., a user is more likely to reference a large, well known location type like a stadium).
+6. If a landmark is not found, but a road or area are found, the road or area are returned. If a road and area are mentioned, the intersection of the road and area is returned.
+
+##### Parameters
+
+* __landmark_gazetteer:__ SpatialPointsDataframe or SpatialFeatures object with points.
+* __landmark_gazetteer.name_var:__ Name of variable indicating name of landmark
+* __landmark_gazetteer.type_var:__ Name of variable indicating type of landmark
+* __landmark_gazetteer.gs_var:__   Name of variable indicating whether landmark is general or specific
+* __roads:__ SpatialLinesDataframe or SpatialFeatures object with lines.
+* __roads.name_var:__ Name of variable indicating name of road
+* __areas:__ SpatialPolygonDataframe or SpatialFeatures object with polygons. Represents administrative areas.
+* __areas.name_var:__ Name of variable indicating name of area.
+* __prepositions_list:__  List of vectors of prepositions. Order of list determines order or prepsoition precedence.
+* __event_words:__  Vector of event words.
+* __junction_words:__  Vector of junction words.
+* __false_positive_phrases:__  Common words found in text that include spurious
+                        location references (eg, githurai bus is the name of a bus)
+                        that includes the location githurai. This is common enough
+                        that we should look for and remove.
+* __type_list:__  List of vectors of types. Order of list determines order or type precedence.
+* __clost_dist_thresh:__  Distance (meters) as to what is considered "close" (eg, is the landmark "close" to a road?)
+* __fuzzy_match:__  Whether to implement fuzzy matching of landmarks using levenstein distance.
+* TODO: Combine below two into one... eg, a list?
+* __fuzzy_match.min_word_length:__  Minimum word length to use fuzzy/levenstein distance for matching.
+* __fuzzy_match.dist:__  Allowable levenstein distances. Vector length must be same as above vector.
+* __fuzzy_match.ngram_max:__  The number of n-grams that should be extracted from text
+   to calculate a levensteing distance against landmarks. For example, if the text is
+   composed of 5 words: w1 w2 w3 w4 and fuzzy_match.ngram_max=3, the function extracts
+   [w1 w2 w3] and compares the levenstein distance to all landmarks. Then in checks
+   [w2 w3 w4], etc.
+* __fuzzy_match.first_letters_same:__  When implementing a fuzzy match, should the first
+                                 letter of the original and found word be the same?
+* __fuzzy_match.last_letters_same:__  When implementing a fuzzy match, should the last
+                                 letter of the original and found word be the same?
+* __crs_distance:__  Coordinate reference system to calculate distances. Should be projected.
+* __crs_out:__  Coordinate reference system for output.
+* __quiet:__  If TRUE, lets user know how far along the algorithm is.
 
 ## Example
 
