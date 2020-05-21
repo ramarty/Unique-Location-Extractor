@@ -48,6 +48,9 @@ The package contains two main functions: `augment_gazetteer` and `locate_event`.
 ## Example
 
 ``` r
+#### Packages
+library(leaflet) # needed just to display output
+
 #### Load Example Data
 landmarks     <- st_read("https://raw.githubusercontent.com/ramarty/Unique-Location-Extractor/master/data/example_landmarks.geojson")
 neighborhoods <- st_read("https://raw.githubusercontent.com/ramarty/Unique-Location-Extractor/master/data/example_areas.geojson")
