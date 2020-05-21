@@ -92,7 +92,7 @@ locate_event <- function(text,
   # crs_distance: Coordinate reference system to calculate distances. Should be projected.
   # crs_out: Coordinate reference system for output. 
   # quiet: If TRUE, lets user know how far along the algorithm is. 
-
+  
   # 1. Checks ------------------------------------------------------------------
   # Check inputs and output errors if anything is wrong.
   
@@ -115,8 +115,8 @@ locate_event <- function(text,
   }
   
   if(!(class(roads)[1] %in% c("SpatialPolygonsDataFrame",
-                                         "SpatialLinesDataFrame",
-                                         "sf"))){
+                              "SpatialLinesDataFrame",
+                              "sf"))){
     stop("roads must be a spatial object")
   }
   
@@ -125,7 +125,7 @@ locate_event <- function(text,
   }
   
   if(!(class(areas)[1] %in% c("SpatialPolygonsDataFrame",
-                            "sf"))){
+                              "sf"))){
     stop("roads must be a SpatialPolygonsDataFrame or an sf object")
   }
   
@@ -151,6 +151,19 @@ locate_event <- function(text,
   if(class(roads)[1] %in% "sf") roads <- roads %>% as("Spatial")
   if(class(areas)[1] %in% "sf") areas <- areas %>% as("Spatial")
   
+  if(T){
+    # The function depends on the coordinate names being lon at lat. Here, use
+    # an efficient and hacky way to ensure that. TODO: NEED TO FIX, NOT DO
+    # THIS HACKY SOLUTION.
+    landmark_gazetteer_df <- landmark_gazetteer@data
+    landmark_gazetteer_coords <- landmark_gazetteer %>% coordinates() %>% as.data.frame()
+    names(landmark_gazetteer_coords) <- c("lon", "lat")
+    landmark_gazetteer_spdf <- bind_cols(landmark_gazetteer_df, landmark_gazetteer_coords)
+    coordinates(landmark_gazetteer_spdf) <- ~lon+lat
+    crs(landmark_gazetteer_spdf) <- CRS(as.character(landmark_gazetteer@proj4string))
+    landmark_gazetteer <- landmark_gazetteer_spdf
+  }
+  
   #### Project Data
   landmark_gazetteer <- spTransform(landmark_gazetteer, CRS(crs_distance))
   roads              <- spTransform(roads,              CRS(crs_distance))
@@ -170,7 +183,7 @@ locate_event <- function(text,
   areas_list <- areas$name
   
   prepositions_all <- prepositions_list %>% unlist()
-
+  
   ## Add unique ID to gazetteer
   landmark_gazetteer$uid <- 1:nrow(landmark_gazetteer)
   roads$uid              <- 1:nrow(roads)
@@ -313,7 +326,7 @@ locate_event_i <- function(text_i,
                                                      fuzzy_match.ngram_max,
                                                      fuzzy_match.first_letters_same,
                                                      fuzzy_match.last_letters_same,
-                                                     c(prepositions_all, event_words, junction_words)) 
+                                                     remove_words = c(prepositions_all, event_words, junction_words)) 
     road_match_fuzzy <- phrase_in_sentence_fuzzy(text_i, 
                                                  roads_list,
                                                  fuzzy_match.min_word_length, 
@@ -373,7 +386,7 @@ locate_event_i <- function(text_i,
   # the same name, and appending and making distict would pick one over the
   # other (?), which we deal with in a separate process.
   locations_in_tweet <- bind_rows(landmark_match, road_match, area_match)
-
+  
   # 2. Landmarks after prepositions --------------------------------------------
   if(!quiet) print("Section - 2")
   # ** 2.1 Subset locations by roads and neighborhood -----------------------------
@@ -434,10 +447,15 @@ locate_event_i <- function(text_i,
   
   # ** 2.3 Extract landmarks ------------------------------------------------------
   if(!quiet) print("Section - 2.3")
-  locations_in_tweet_prep <- map_df(prep_locs, 
-                                    extract_locations_after_words,
-                                    text_i_no_stopwords,
-                                    landmark_gazetteer) 
+  if(length(prep_locs) > 0){
+    locations_in_tweet_prep <- map_df(prep_locs, 
+                                      extract_locations_after_words,
+                                      text_i_no_stopwords,
+                                      landmark_gazetteer) 
+  } else{
+    locations_in_tweet_prep <- data.frame(NULL) # hacky solution... TODO
+  }
+  
   
   # ** 2.4 Remove if landmark already found ---------------------------------------
   if(!quiet) print("Section - 2.4")
@@ -473,7 +491,7 @@ locate_event_i <- function(text_i,
     if(!quiet) print("Section - 4.1")
     # Prep location datasets before continuing with search
     
-
+    
     ## Dataset per type
     # Create dataset for each type
     landmark_match <- locations_in_tweet[locations_in_tweet$location_type %in% "landmark",]
@@ -624,7 +642,7 @@ locate_event_i <- function(text_i,
     roads_final <- locations_in_tweet[locations_in_tweet$location_type %in% "road",] %>% unique
     landmarks_final <- locations_in_tweet[locations_in_tweet$location_type %in% "landmark",] %>% unique
     road_intersections_final <- road_intersections 
-  
+    
     # ** 7.2 Landmark Decision Process --------------------------------------------
     if(!quiet) print("Section - 7.2")
     ## Null output
@@ -698,7 +716,7 @@ locate_event_i <- function(text_i,
       # **** 7.2.3 Ambiguous Pattern -------------------------------------------
       if(!quiet) print("Section - 7.2.3")
       if(!loc_searched){
-    
+        
         df_out <- determine_location_from_landmark(
           landmarks_final,
           "landmark_ambiguous_pattern",
@@ -706,14 +724,14 @@ locate_event_i <- function(text_i,
           roads,
           roads_final,
           crs_distance)
-
+        
         loc_searched <- TRUE
         
       }
       
       # **** 7.2.4 Output Cleaning and Checks ---------------------------------------
       if(!quiet) print("Section 7.2.4")
-
+      
       #### Spatially define
       df_out_sp <- df_out 
       coordinates(df_out_sp) <- ~lon+lat
@@ -855,7 +873,7 @@ locate_event_i <- function(text_i,
   if(!quiet) print("Section - 9")
   # If spatial object, reproject and make sf
   if(typeof(df_out) %in% "S4"){
-
+    
     df_out <- spTransform(df_out, CRS(crs_out))
     df_out <- st_as_sf(df_out)
   } else{

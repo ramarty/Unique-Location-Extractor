@@ -165,7 +165,31 @@ After extracting landmarks, the algorithm chooses the correct landmark using a s
 ## Example
 
 ``` r
-# Have example data, where geospatial is .geojson
+## Load Example Data
+landmarks     <- st_read("https://raw.githubusercontent.com/ramarty/Unique-Location-Extractor/master/data/example_landmarks.geojson")
+neighborhoods <- st_read("https://raw.githubusercontent.com/ramarty/Unique-Location-Extractor/master/data/example_areas.geojson")
+roads         <- st_read("https://raw.githubusercontent.com/ramarty/Unique-Location-Extractor/master/data/example_roads.geojson")
 
+## Augment Gaztteer
+landmarks_aug <- augment_gazetteer(landmarks,
+                                   crs_distance = "+init=epsg:21037")
 
+## Locate Crashes in example tweets
+tweets <- c("crash at garden city on thika rd",
+           "crash at pangani")
+crash_locs <- locate_event(text = tweets,
+                           landmark_gazetteer = landmarks_aug,
+                           areas = neighborhoods,
+                           roads = roads,
+                           crs_distance = "+init=epsg:21037",
+                           quiet = T)
+
+## Display output
+leaflet() %>%
+  addTiles() %>%
+  addCircles(data=crash_locs,
+             label = ~text,
+             opacity = 1,
+             weight=10,
+             color = "red")
 ```

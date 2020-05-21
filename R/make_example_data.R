@@ -36,15 +36,65 @@ roads <- st_read("https://raw.githubusercontent.com/ramarty/Unique-Location-Extr
 landmarks_aug <- augment_gazetteer(landmarks,
                                    crs_distance = "+init=epsg:21037")
 
-crash_locs <- locate_event(text = "crash at garden city on thika rd", 
+crash_locs <- locate_event(text = c("crash at garden city on thika rd",
+                                    "crash at pangani"), 
                            landmark_gazetteer = landmarks_aug,
                            areas = neighborhoods,
                            roads = roads,
-                           crs_distance = "+init=epsg:21037")
+                           crs_distance = "+init=epsg:21037",
+                           quiet = T)
 
-text roads areas crs_distance
+leaflet() %>%
+  addTiles() %>%
+  addCircles(data=crash_locs, 
+             label = ~text,
+             opacity = 1,
+             weight=10,
+             color = "red")
 
 
-landmarks %>% as("Spatial") %>% as.data.frame() %>% head()
+
+
+
+
+text = "crash at garden city on thika rd"
+landmark_gazetteer = landmarks
+landmark_gazetteer.name_var = "name"
+landmark_gazetteer.type_var = "type"
+landmark_gazetteer.gs_var = "general_specific"
+roads = roads
+roads.name_var = "name"
+areas = neighborhoods
+areas.name_var = "name"
+prepositions_list = list(c("at", "next to","around", 
+                           "just after", "opposite","opp", 
+                           "apa", "hapa","happened at",
+                           "just before","at the","outside",
+                           "right before"),
+                         c("near", "after", "toward",
+                           "along", "towards", "approach"),
+                         c("past","from","on"))
+event_words = c("accidents", "accident", "crash", 
+                "overturn", "collision", "wreck")
+junction_words = c("intersection", "junction")
+false_positive_phrases = "" 
+type_list = "" # NOT IMPLEMENTED YET
+clost_dist_thresh = 500
+fuzzy_match = TRUE
+fuzzy_match.min_word_length = c(5,11)
+fuzzy_match.dist = c(1,2)
+fuzzy_match.ngram_max = 3
+fuzzy_match.first_letters_same = TRUE
+fuzzy_match.last_letters_same = TRUE
+crs_distance
+crs_out = "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
+quiet = T
+
+
+
+
+
+
+
 
 

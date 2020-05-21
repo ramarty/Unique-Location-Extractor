@@ -79,8 +79,9 @@ extract_dominant_cluster <- function(sdf,
   if(max_dist_km < close_thresh_km){
     
     sdf_out <- sdf
-    sdf_out$general_specific <- "specific"
-    
+    sdf_out@data <- sdf_out@data %>%
+      dplyr::mutate(general_specific = "specific")
+
     # If locations aren't close and not too many locations...  
   } else if ( (max_dist_km > close_thresh_km) & (nrow(sdf) <= N_loc_limit)){
     
@@ -488,7 +489,7 @@ extract_locations_after_words <- function(word_loc,
     # with fewest words has 2 words, we only keep landmarks with 2 words
     min_words <- min(str_count(landmarks_subset$name, "\\S+"))
     landmarks_subset <- landmarks_subset[str_count(landmarks_subset$name, "\\S+") %in% min_words,]
-    landmarks_subset <- landmarks_subset[!is.na(landmarks_subset$lat),] # if blank, will give one row with NAs
+    #landmarks_subset <- landmarks_subset[!is.na(landmarks_subset$lat),] # if blank, will give one row with NAs
     
     # 4. Check for dominant cluster ------------------------------------------
     landmarks_subset <- extract_dominant_cluster(landmarks_subset)
