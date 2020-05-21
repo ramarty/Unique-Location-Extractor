@@ -45,6 +45,38 @@ source("https://raw.githubusercontent.com/ramarty/Unique-Location-Extractor/mast
 
 The package contains two main functions: `augment_gazetteer` and `locate_event`. The backbone of locating events is looking up location references in a gazetteer, or a geographic dictionary. The `augment_gazetteer` facilitates cleaning a gazetteer that may have been constructed from sources such as Open Street Maps, geonames or Google Maps. It is specifically design to clean point locations or landmarks. The `locate_event` function then uses the gazetteer. `locate_event` takes text as input and returns the location of the relevant event.
 
+## Example
+
+``` r
+#### Load Example Data
+landmarks     <- st_read("https://raw.githubusercontent.com/ramarty/Unique-Location-Extractor/master/data/example_landmarks.geojson")
+neighborhoods <- st_read("https://raw.githubusercontent.com/ramarty/Unique-Location-Extractor/master/data/example_areas.geojson")
+roads         <- st_read("https://raw.githubusercontent.com/ramarty/Unique-Location-Extractor/master/data/example_roads.geojson")
+
+#### Augment Gaztteer
+landmarks_aug <- augment_gazetteer(landmarks,
+                                   crs_distance = "+init=epsg:21037")
+
+#### Locate Crashes in example tweets
+tweets <- c("crash at garden city on thika rd",
+           "crash at pangani")
+crash_locs <- locate_event(text = tweets,
+                           landmark_gazetteer = landmarks_aug,
+                           areas = neighborhoods,
+                           roads = roads,
+                           crs_distance = "+init=epsg:21037",
+                           quiet = T)
+
+#### Display output
+leaflet() %>%
+  addTiles() %>%
+  addCircles(data=crash_locs,
+             label = ~text,
+             opacity = 1,
+             weight=10,
+             color = "red")
+```
+
 ## augment_gazetteer
 
 ##### Description
@@ -161,35 +193,3 @@ After extracting landmarks, the algorithm chooses the correct landmark using a s
 * __crs_distance:__  Coordinate reference system to calculate distances. Should be projected.
 * __crs_out:__  Coordinate reference system for output.
 * __quiet:__  If TRUE, lets user know how far along the algorithm is.
-
-## Example
-
-``` r
-## Load Example Data
-landmarks     <- st_read("https://raw.githubusercontent.com/ramarty/Unique-Location-Extractor/master/data/example_landmarks.geojson")
-neighborhoods <- st_read("https://raw.githubusercontent.com/ramarty/Unique-Location-Extractor/master/data/example_areas.geojson")
-roads         <- st_read("https://raw.githubusercontent.com/ramarty/Unique-Location-Extractor/master/data/example_roads.geojson")
-
-## Augment Gaztteer
-landmarks_aug <- augment_gazetteer(landmarks,
-                                   crs_distance = "+init=epsg:21037")
-
-## Locate Crashes in example tweets
-tweets <- c("crash at garden city on thika rd",
-           "crash at pangani")
-crash_locs <- locate_event(text = tweets,
-                           landmark_gazetteer = landmarks_aug,
-                           areas = neighborhoods,
-                           roads = roads,
-                           crs_distance = "+init=epsg:21037",
-                           quiet = T)
-
-## Display output
-leaflet() %>%
-  addTiles() %>%
-  addCircles(data=crash_locs,
-             label = ~text,
-             opacity = 1,
-             weight=10,
-             color = "red")
-```
