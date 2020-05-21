@@ -138,6 +138,7 @@ The `augment_gazetteer` function adds additional landmarks to account for differ
 * __rm.name_end:__ Remov ethe landmark if it ends with one of these words. Implemented
               after N/skip-grams and parallel landmarks are added.
 * __crs_distance:__ Coordiante reference system to use for distance calculations.
+* __crs_out:__  Coordinate reference system for output.
 
 ## locate_event
 

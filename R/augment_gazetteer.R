@@ -31,7 +31,8 @@ augment_gazetteer <- function(landmarks,
                               rm.contains = c("road", "rd"),
                               rm.name_begin = c(stopwords("en"), c("near","at","the", "towards", "near")),
                               rm.name_end = c("highway", "road", "rd", "way", "ave", "avenue", "street", "st"),
-                              crs_distance){
+                              crs_distance,
+                              crs_out = "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"){
   
   # DESCRIPTION: Augments landmark gazetteer
   # ARGS:
@@ -80,6 +81,7 @@ augment_gazetteer <- function(landmarks,
   # rm.name_end: Remov ethe landmark if it ends with one of these words. Implemented 
   #              after N/skip-grams and parallel landmarks are added.
   # crs_distance: Coordiante reference system to use for distance calculations.
+  # crs_out: Coordinate reference system for output. 
 
   # 1. Checks ------------------------------------------------------------------
   if(class(landmarks)[1] %in% "sf") landmarks <- landmarks %>% as("Spatial")
@@ -142,7 +144,7 @@ augment_gazetteer <- function(landmarks,
   # Grab landmarks to make landmarks from
   landmarks_for_ngrams_df <- landmarks %>%
     as.data.frame() %>%
-    filter(number_words %in% grams_min_words:grams_min_words)
+    filter(number_words %in% grams_min_words:grams_max_words)
   
   ## TODO: GENERALIZE!!
   if(is.null(landmarks_for_ngrams_df$lat[1])){
@@ -171,7 +173,7 @@ augment_gazetteer <- function(landmarks,
   # Grab landmarks to make landmarks from
   landmarks_for_skipgrams_df <- landmarks %>%
     as.data.frame() %>%
-    filter(number_words %in% grams_min_words:grams_min_words)
+    filter(number_words %in% grams_min_words:grams_max_words)
   
   ## TODO: GENERALIZE!!
   if(is.null(landmarks_for_skipgrams_df$lat[1])){
@@ -239,7 +241,7 @@ augment_gazetteer <- function(landmarks,
   landmarks_grams_nonunique_gs <- lapply(unique(landmarks_grams_nonunique$name), function(name){
     #print(name)
     out <- extract_dominant_cluster(landmarks_grams_nonunique[landmarks_grams_nonunique$name %in% name,],
-                                    collapse_specific_coords = T,
+                                    collapse_specific_coords = F,
                                     return_general_landmarks = "all")
     
     # where are we?
@@ -459,6 +461,8 @@ augment_gazetteer <- function(landmarks,
   # ** 7.5 Variables to output -------------------------------------------------
   landmarks_out@data <- landmarks_out@data %>%
     dplyr::select(name, type, general_specific, name_original)
+  
+  landmarks_out <- spTransform(landmarks_out, CRS(crs_out))
   
   # Remove landmarks that would highly raise likelihood of false positives
   #landmarks <- landmarks[!(landmarks$name %in% landmarks_to_remove),]

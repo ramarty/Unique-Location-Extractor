@@ -11,7 +11,7 @@ landmark_gazetteer_orig@data <- landmark_gazetteer_orig@data %>%
 
 ##
 roads_nairobi <- readRDS(file.path(algorithm_inputs, "roads_augmented", "osm_roads_aug.Rds"))
-roads_nairobi <- roads_nairobi[grepl("mombasa|thika", roads_nairobi$name),]
+roads_nairobi <- roads_nairobi[grepl("mombasa|thika|ngong", roads_nairobi$name),]
 
 ##
 areas_nairobi <- readRDS(file.path(algorithm_inputs, "nairobi_estates", "nairobi_estates.Rds"))
@@ -37,12 +37,21 @@ landmarks_aug <- augment_gazetteer(landmarks,
                                    crs_distance = "+init=epsg:21037")
 
 crash_locs <- locate_event(text = c("crash occurred near garden city on thika road on your way towards roysambu",
+                                    "crash occured at garden city",
+                                    "crash occured near roysambu on thika rd",
                                     "crash at pangani"), 
                            landmark_gazetteer = landmarks_aug,
                            areas = neighborhoods,
                            roads = roads,
                            crs_distance = "+init=epsg:21037",
                            quiet = T)
+
+landmarks_aug[landmarks_aug$name %in% "garden city",]
+
+l <- landmarks[grepl("garden city", landmarks$name),] %>% as("Spatial") %>% spTransform("+init=epsg:21037")
+
+a <- extract_dominant_cluster(l)
+
 
 leaflet() %>%
   addTiles() %>%
@@ -53,7 +62,9 @@ leaflet() %>%
              color = "red")
 
 
-
+leaflet() %>%
+  addTiles() %>%
+  addCircles(data=landmarks_aug[landmarks_aug$name %in% "garden city",])
 
 
 
