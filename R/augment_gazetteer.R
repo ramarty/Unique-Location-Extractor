@@ -32,7 +32,8 @@ augment_gazetteer <- function(landmarks,
                               rm.name_begin = c(stopwords("en"), c("near","at","the", "towards", "near")),
                               rm.name_end = c("highway", "road", "rd", "way", "ave", "avenue", "street", "st"),
                               crs_distance,
-                              crs_out = "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"){
+                              crs_out = "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0",
+                              quiet = T){
   
   # DESCRIPTION: Augments landmark gazetteer
   # ARGS:
@@ -84,6 +85,8 @@ augment_gazetteer <- function(landmarks,
   # crs_out: Coordinate reference system for output. 
 
   # 1. Checks ------------------------------------------------------------------
+  if(!quiet) print("Section 1")
+  
   if(class(landmarks)[1] %in% "sf") landmarks <- landmarks %>% as("Spatial")
   
   if(!(class(landmarks)[1] %in% c("SpatialPointsDataFrame", "sf"))){
@@ -91,6 +94,7 @@ augment_gazetteer <- function(landmarks,
   }
   
   # 2. Prep landmark object ----------------------------------------------------
+  if(!quiet) print("Section 2")
   
   #### Prep variables
   landmarks$name <- landmarks[[landmarks.name_var]]
@@ -103,6 +107,8 @@ augment_gazetteer <- function(landmarks,
   landmarks <- spTransform(landmarks, CRS(crs_distance))
   
   # 3. Text Cleaning -----------------------------------------------------------
+  if(!quiet) print("Section 3")
+  
   # Remove extract whitespace
   landmarks$name_withslash <- landmarks$name %>% 
     str_replace_all("/", " / ") %>%
@@ -120,6 +126,7 @@ augment_gazetteer <- function(landmarks,
     str_squish 
   
   # 4. Remove landmarks --------------------------------------------------------
+  if(!quiet) print("Section 4")
   
   #### Landmarks must be 2 or more characters
   landmarks <- landmarks[nchar(landmarks$name) >= 2,]
@@ -136,22 +143,25 @@ augment_gazetteer <- function(landmarks,
   # 5. N-Grams and Skip-Grams --------------------------------------------------
   
   # ** 5.1 Create N-Grams and Skip-Grams ---------------------------------------
+  if(!quiet) print("Section 5.1")
   
   #### N-grams
   # Only make ngrams if the number of words in the landmark name is between
   # N_words.min and N_words.max. Additionally, only make n-grams of length 2-3.
   
   # Grab landmarks to make landmarks from
+
   landmarks_for_ngrams_df <- landmarks %>%
     as.data.frame() %>%
     filter(number_words %in% grams_min_words:grams_max_words)
-  
+
   ## TODO: GENERALIZE!!
   if(is.null(landmarks_for_ngrams_df$lat[1])){
     landmarks_for_ngrams_df <- landmarks_for_ngrams_df %>%
       dplyr::rename(lon = coords.x1,
                     lat = coords.x2)
   }
+
   
   # Make dataframe, where each row is an n-gram, and includes all the other
   # variables from the landmark dataframe (lat, lon, type, etc)
@@ -159,7 +169,8 @@ augment_gazetteer <- function(landmarks,
     dplyr::pull(name) %>%
     tokens(remove_symbols = F, remove_punct = F) %>% 
     tokens_ngrams(n=2:3, concatenator = " ") %>% # TODO: parameterize 2:3
-    lapply(t %>% as.data.frame) %>% 
+    as.list() %>%
+    lapply(function(x) x %>% t %>% as.data.frame()) %>%
     bind_rows() %>%
     bind_cols(landmarks_for_ngrams_df) %>%
     dplyr::rename(name_original = name) %>%
@@ -191,7 +202,8 @@ augment_gazetteer <- function(landmarks,
     tokens_skipgrams(n=2:3, 
                      skip=0:4, 
                      concatenator = " ") %>%
-    lapply(t %>% as.data.frame) %>% 
+    as.list() %>%
+    lapply(function(x) x %>% t %>% as.data.frame()) %>%
     bind_rows() %>%
     bind_cols(landmarks_for_skipgrams_df) %>%
     dplyr::rename(name_original = name) %>%
@@ -220,6 +232,7 @@ augment_gazetteer <- function(landmarks,
   crs(landmarks_grams) <- CRS(crs_distance)
   
   # ** 5.2 Determine Which N/Skip-Grams to Add to Dictionary -------------------
+  if(!quiet) print("Section 5.2")
   
   #### If two words and one word is one letter, remove
   remove <- (str_count(landmarks_grams$name, "\\S+") %in% 2) &
@@ -271,6 +284,8 @@ augment_gazetteer <- function(landmarks,
   # 6. Create Parallel Landmarks -----------------------------------------------
   
   # ** 6.1 Add type if landmark ends with word ---------------------------------
+  if(!quiet) print("Section 6.1")
+  
   par_landmarks.word_end_addtype <- lapply(1:length(parallel.word_end_addtype), function(i){
     
     words_i <- paste0("\\b", parallel.word_end_addtype[[i]]$words, "$") %>% paste(collapse = "|")

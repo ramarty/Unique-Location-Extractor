@@ -548,7 +548,6 @@ locate_event_i <- function(text_i,
     # ** 4.3 Restrict Locations/Landmarks to Consider --------------------------
     if(!quiet) print("Section - 4.3")
     ## Remove general landmarks
-    print(road_match_sp)
     rm_gen_out <- remove_general_landmarks(landmark_match,
                                            landmark_gazetteer,
                                            road_match_sp)

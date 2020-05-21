@@ -36,14 +36,32 @@ roads <- st_read("https://raw.githubusercontent.com/ramarty/Unique-Location-Extr
 landmarks_aug <- augment_gazetteer(landmarks,
                                    crs_distance = "+init=epsg:21037")
 
-crash_locs <- locate_event(text = c("crash occurred near garden city on thika road on your way towards roysambu",
-                                    "crash occured near roysambu on thika rd",
-                                    "crash at pangani"), 
+tweets <- c("crash occurred near garden city on thika road on your way towards roysambu",
+            "crash at garden city",
+            "crash occured near roysambu on thika rd",
+            "crash at pangani")
+crash_locs <- locate_event(text = tweets, 
                            landmark_gazetteer = landmarks_aug,
                            areas = neighborhoods,
                            roads = roads,
-                           crs_distance = "+init=epsg:21037",
-                           quiet = F)
+                           crs_distance = "+init=epsg:21037")
+
+leaflet() %>%
+  addTiles() %>%
+  addCircles(data=crash_locs, 
+             label = ~text,
+             opacity = 1,
+             weight=10,
+             color = "red")
+
+leaflet() %>%
+  addTiles() %>%
+  addCircles(data=landmarks[grepl("garden city", landmarks$name),],
+             color="red",
+             label = ~name) 
+  
+
+
 
 roads_w <- roads  %>% spTransform("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0")
 
