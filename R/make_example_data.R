@@ -36,9 +36,9 @@ roads <- st_read("https://raw.githubusercontent.com/ramarty/Unique-Location-Extr
 landmarks_aug <- augment_gazetteer(landmarks,
                                    crs_distance = "+init=epsg:21037")
 
-tweets <- c("crash at intersection of thika highway and outer ring rd",
-            "crash occurred near garden city on thika road on your way towards roysambu",
+tweets <- c("crash occurred near garden city on thika road on your way towards roysambu",
             "crash at garden city",
+            "crash at intersection of juja road and outer ring rd",
             "crash occured near roysambu on thika rd",
             "crash at pangani")
 crash_locs <- locate_event(text = tweets, 
@@ -97,7 +97,7 @@ leaflet() %>%
 
 
 
-text = "crash occured at garden city on ngong rd"
+text = "crash at intersection of juja road and outer ring rd"
 text_i = text
 landmark_gazetteer = landmarks_aug
 landmark_gazetteer.name_var = "name"
@@ -127,7 +127,7 @@ fuzzy_match.dist = c(1,2)
 fuzzy_match.ngram_max = 3
 fuzzy_match.first_letters_same = TRUE
 fuzzy_match.last_letters_same = TRUE
-crs_distance
+crs_distance = "+init=epsg:21037"
 crs_out = "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
 quiet = T
 

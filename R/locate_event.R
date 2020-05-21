@@ -169,7 +169,7 @@ locate_event <- function(text,
   roads              <- spTransform(roads,              CRS(crs_distance))
   areas              <- spTransform(areas,              CRS(crs_distance))
   
-
+  
   #### Clean Names
   landmark_gazetteer$name <- landmark_gazetteer$name %>%
     str_replace_all("[[:punct:]]", "")
@@ -195,7 +195,7 @@ locate_event <- function(text,
   
   # 3. Clean/Prep Text ---------------------------------------------------------
   # Cleans and preps text
-
+  
   #### Clean text
   text <- text %>%
     
@@ -234,7 +234,7 @@ locate_event <- function(text,
     
     # Squish strings. Should be last thing done
     str_squish()
-
+  
   #### Remove false positive phrases
   for(phrase in false_positive_phrases){
     # Replace false positive phrases with "blankword", where blankword appears the
@@ -246,7 +246,7 @@ locate_event <- function(text,
                                      rep("blankword", wordcount(phrase)) %>% 
                                        paste(collapse=" "))
   }
-
+  
   # 4. Implement Algorithm -----------------------------------------------------
   if(!quiet) counter_number <<- 1
   
@@ -310,7 +310,7 @@ locate_event_i <- function(text_i,
   
   # 1. Determine Location Matches in Gazetteer ---------------------------------
   if(!quiet) print(text_i)
-
+  
   if(!quiet) print("Section - 1")
   #### Exact Match
   landmark_match     <- phrase_in_sentence_exact(text_i, landmark_list) 
@@ -399,14 +399,14 @@ locate_event_i <- function(text_i,
   # Roads take precedent over landmarks, so OK to do this here.
   if((nrow(road_match) > 0) & (nrow(landmark_match) > 0) & T){
     road_match_sp <- roads[roads$name %in% road_match$matched_words_correct_spelling,]
-
+    
     land_road_restrict <- restrict_landmarks_by_location(landmark_match,
                                                          landmark_gazetteer,
                                                          road_match_sp) 
     landmark_match     <- land_road_restrict$landmark_match
     landmark_gazetteer <- land_road_restrict$landmark_gazetteer
   }
-
+  
   ## Areas
   # Neighborhoods may not take precedent over landmarks. For example, "garden city"
   # matches the "garden" and other garden landmarks. Garden city is not near
@@ -690,85 +690,85 @@ locate_event_i <- function(text_i,
         }
       }
       
-      # **** 7.2.2 Intersection Search ------------------------------------------------
-      if(!quiet) print("Section - 7.2.2")
-      #### If there is an intersection word and more than one intersection
-      if(grepl(junction_words_regex, text_i) & nrow(road_intersections_final) > 0 & !loc_searched){
-        
-        df_out <- determine_location_from_intersection(
-          road_intersections_final,
-          "intersection_word")
-        
-        loc_searched <- TRUE
-        
+    }
+    
+    # **** 7.2.2 Intersection Search ------------------------------------------------
+    if(!quiet) print("Section - 7.2.2")
+    #### If there is an intersection word and more than one intersection
+    if(grepl(junction_words_regex, text_i) & nrow(road_intersections_final) > 0 & !loc_searched){
+
+      df_out <- determine_location_from_intersection(
+        road_intersections_final %>% as.data.frame(),
+        "intersection_word")
+      
+      loc_searched <- TRUE
+      
+    }
+    
+    #### If there is only one intersection
+    if(nrow(road_intersections_final) %in% 1 & !loc_searched){
+      
+      df_out <- determine_location_from_intersection(
+        road_intersections_final %>% as.data.frame(),
+        "one_intersection")
+      
+      loc_searched <- TRUE
+    }
+    
+    # **** 7.2.3 Ambiguous Pattern -------------------------------------------
+    if(!quiet) print("Section - 7.2.3")
+    if((nrow(landmarks_final) > 0) & !loc_searched){
+      
+      df_out <- determine_location_from_landmark(
+        landmarks_final,
+        "landmark_ambiguous_pattern",
+        landmark_gazetteer,
+        roads,
+        roads_final,
+        crs_distance)
+      
+      loc_searched <- TRUE
+      
+    }
+    
+    # **** 7.2.4 Output Cleaning and Checks ---------------------------------------
+    if(!quiet) print("Section 7.2.4")
+    
+    #### Spatially define
+    df_out_sp <- df_out 
+    coordinates(df_out_sp) <- ~lon+lat
+    crs(df_out_sp) <- CRS(crs_distance)
+    
+    #### If dataframe more than one row, collapse to one row
+    df_out$id <- 1
+    df_out <- df_out %>%
+      group_by(id) %>%
+      summarise_all(function(x) x %>% unique %>% paste(collapse = ";")) %>%
+      dplyr::rename(lon_all = lon,
+                    lat_all = lat) %>%
+      dplyr::select(-id)
+    
+    #### Dominant Cluster
+    df_out_sp <- extract_dominant_cluster(df_out_sp)
+    
+    if(nrow(df_out_sp) > 0){
+      coords <- gCentroid(df_out_sp) 
+      coords$id <- 1 # dummy variable so if spatial dataframe
+      coords@data <- df_out %>% as.data.frame() # TODO: Check?
+      
+      df_out <- coords
+      
+      #### Add distance to mentioned road
+      if(!is.null(road_match_sp) > 0){
+        df_out$dist_mentioned_road <- gDistance(road_match_agg_sp, df_out) 
       }
       
-      #### If there is only one intersection
-      if(nrow(road_intersections_final) %in% 1 & !loc_searched){
-        
-        df_out <- determine_location_from_intersection(
-          road_intersections_final,
-          "one_intersection")
-        
-        loc_searched <- TRUE
-      }
-      
-      # **** 7.2.3 Ambiguous Pattern -------------------------------------------
-      if(!quiet) print("Section - 7.2.3")
-      if(!loc_searched){
-        
-        df_out <- determine_location_from_landmark(
-          landmarks_final,
-          "landmark_ambiguous_pattern",
-          landmark_gazetteer,
-          roads,
-          roads_final,
-          crs_distance)
-        
-        loc_searched <- TRUE
-        
-      }
-      
-      # **** 7.2.4 Output Cleaning and Checks ---------------------------------------
-      if(!quiet) print("Section 7.2.4")
-      
-      #### Spatially define
-      df_out_sp <- df_out 
-      coordinates(df_out_sp) <- ~lon+lat
-      crs(df_out_sp) <- CRS(crs_distance)
-      
-      #### If dataframe more than one row, collapse to one row
-      df_out$id <- 1
+      # If no dominant cluster  
+    } else{
       df_out <- df_out %>%
-        group_by(id) %>%
-        summarise_all(function(x) x %>% unique %>% paste(collapse = ";")) %>%
-        dplyr::rename(lon_all = lon,
-                      lat_all = lat) %>%
-        dplyr::select(-id)
-      
-      #### Dominant Cluster
-      df_out_sp <- extract_dominant_cluster(df_out_sp)
-      
-      if(nrow(df_out_sp) > 0){
-        coords <- gCentroid(df_out_sp) 
-        coords$id <- 1 # dummy variable so if spatial dataframe
-        coords@data <- df_out %>% as.data.frame() # TODO: Check?
-        
-        df_out <- coords
-        
-        #### Add distance to mentioned road
-        if(!is.null(road_match_sp) > 0){
-          df_out$dist_mentioned_road <- gDistance(road_match_agg_sp, df_out) 
-        }
-        
-        # If no dominant cluster  
-      } else{
-        df_out <- df_out %>%
-          mutate(lon = NA,
-                 lat = NA,
-                 no_dominant_cluster = T)
-      }
-      
+        mutate(lon = NA,
+               lat = NA,
+               no_dominant_cluster = T)
     }
     
     if((nrow(roads_final) > 0 | nrow(areas_final) > 0) & !loc_searched){

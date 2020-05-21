@@ -63,6 +63,7 @@ landmarks_aug <- augment_gazetteer(landmarks,
 #### Locate Crashes in example tweets
 tweets <- c("crash occurred near garden city on thika road on your way towards roysambu",
             "crash at garden city",
+            "crash at intersection of juja road and outer ring rd",
             "crash occured near roysambu on thika rd",
             "crash at pangani")
 
