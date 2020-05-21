@@ -11,7 +11,7 @@ landmark_gazetteer_orig@data <- landmark_gazetteer_orig@data %>%
 
 ##
 roads_nairobi <- readRDS(file.path(algorithm_inputs, "roads_augmented", "osm_roads_aug.Rds"))
-roads_nairobi <- roads_nairobi[grepl("mombasa|thika|ngong", roads_nairobi$name),]
+roads_nairobi <- roads_nairobi[grepl("mombasa|thika|outer ring", roads_nairobi$name),]
 
 ##
 areas_nairobi <- readRDS(file.path(algorithm_inputs, "nairobi_estates", "nairobi_estates.Rds"))
@@ -60,7 +60,10 @@ leaflet() %>%
              color="red",
              label = ~name) 
   
-
+leaflet() %>%
+  addTiles() %>%
+  addPolylines(data=roads,
+               label=~name)
 
 
 roads_w <- roads  %>% spTransform("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0")
