@@ -37,6 +37,7 @@ library(sf)
 
 ## Load functions
 source("https://raw.githubusercontent.com/ramarty/Unique-Location-Extractor/master/R/helper_functions.R")
+source("https://raw.githubusercontent.com/ramarty/Unique-Location-Extractor/master/R/augment_gazetteer.R")
 source("https://raw.githubusercontent.com/ramarty/Unique-Location-Extractor/master/R/locate_event.R")
 ```
 
