@@ -37,14 +37,13 @@ landmarks_aug <- augment_gazetteer(landmarks,
                                    crs_distance = "+init=epsg:21037")
 
 crash_locs <- locate_event(text = c("crash occurred near garden city on thika road on your way towards roysambu",
-                                    "crash occured at garden city",
                                     "crash occured near roysambu on thika rd",
                                     "crash at pangani"), 
                            landmark_gazetteer = landmarks_aug,
                            areas = neighborhoods,
                            roads = roads,
                            crs_distance = "+init=epsg:21037",
-                           quiet = T)
+                           quiet = F)
 
 roads_w <- roads  %>% spTransform("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0")
 

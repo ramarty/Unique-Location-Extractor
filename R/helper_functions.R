@@ -548,6 +548,11 @@ remove_general_landmarks <- function(landmark_match,
   # If there are general landmarks AND roads
   if(("general" %in% landmark_match_gs$general_specific) & !is.null(road_match_sp)){
     
+    ## Aggregate roads
+    road_match_agg_sp <- road_match_sp # TODO: need this, or pass in as input?
+    road_match_agg_sp$id <- 1
+    road_match_agg_sp <- raster::aggregate(road_match_agg_sp, by="id")
+    
     ## Grab spatial points of general landmarks found in text
     landmark_general_sp <- landmark_gazetteer[(landmark_gazetteer$general_specific %in% "general") &
                                                 (landmark_gazetteer$uid %in% landmark_match_gs$uid),]

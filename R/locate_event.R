@@ -310,8 +310,7 @@ locate_event_i <- function(text_i,
   
   # 1. Determine Location Matches in Gazetteer ---------------------------------
   if(!quiet) print(text_i)
-  print(nrow(landmark_gazetteer))
-  
+
   if(!quiet) print("Section - 1")
   #### Exact Match
   landmark_match     <- phrase_in_sentence_exact(text_i, landmark_list) 
@@ -549,6 +548,7 @@ locate_event_i <- function(text_i,
     # ** 4.3 Restrict Locations/Landmarks to Consider --------------------------
     if(!quiet) print("Section - 4.3")
     ## Remove general landmarks
+    print(road_match_sp)
     rm_gen_out <- remove_general_landmarks(landmark_match,
                                            landmark_gazetteer,
                                            road_match_sp)
