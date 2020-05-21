@@ -11,7 +11,7 @@ landmark_gazetteer_orig@data <- landmark_gazetteer_orig@data %>%
 
 ##
 roads_nairobi <- readRDS(file.path(algorithm_inputs, "roads_augmented", "osm_roads_aug.Rds"))
-roads_nairobi <- roads_nairobi[grepl("mombasa|thika|outer ring", roads_nairobi$name),]
+roads_nairobi <- roads_nairobi[grepl("mombasa|thika|juja|outer ring", roads_nairobi$name),]
 
 ##
 areas_nairobi <- readRDS(file.path(algorithm_inputs, "nairobi_estates", "nairobi_estates.Rds"))
@@ -36,7 +36,8 @@ roads <- st_read("https://raw.githubusercontent.com/ramarty/Unique-Location-Extr
 landmarks_aug <- augment_gazetteer(landmarks,
                                    crs_distance = "+init=epsg:21037")
 
-tweets <- c("crash occurred near garden city on thika road on your way towards roysambu",
+tweets <- c("crash at intersection of thika highway and outer ring rd",
+            "crash occurred near garden city on thika road on your way towards roysambu",
             "crash at garden city",
             "crash occured near roysambu on thika rd",
             "crash at pangani")
@@ -44,7 +45,8 @@ crash_locs <- locate_event(text = tweets,
                            landmark_gazetteer = landmarks_aug,
                            areas = neighborhoods,
                            roads = roads,
-                           crs_distance = "+init=epsg:21037")
+                           crs_distance = "+init=epsg:21037",
+                           quiet = F)
 
 leaflet() %>%
   addTiles() %>%
@@ -59,7 +61,7 @@ leaflet() %>%
   addCircles(data=landmarks[grepl("garden city", landmarks$name),],
              color="red",
              label = ~name) 
-  
+
 leaflet() %>%
   addTiles() %>%
   addPolylines(data=roads,

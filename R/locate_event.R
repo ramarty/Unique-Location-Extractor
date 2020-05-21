@@ -169,6 +169,7 @@ locate_event <- function(text,
   roads              <- spTransform(roads,              CRS(crs_distance))
   areas              <- spTransform(areas,              CRS(crs_distance))
   
+
   #### Clean Names
   landmark_gazetteer$name <- landmark_gazetteer$name %>%
     str_replace_all("[[:punct:]]", "")
@@ -194,7 +195,7 @@ locate_event <- function(text,
   
   # 3. Clean/Prep Text ---------------------------------------------------------
   # Cleans and preps text
-  
+
   #### Clean text
   text <- text %>%
     
@@ -233,7 +234,7 @@ locate_event <- function(text,
     
     # Squish strings. Should be last thing done
     str_squish()
-  
+
   #### Remove false positive phrases
   for(phrase in false_positive_phrases){
     # Replace false positive phrases with "blankword", where blankword appears the
@@ -242,10 +243,10 @@ locate_event <- function(text,
     # blankword blankword". Replacing with "bankword" is important as it preserves
     # the number of words between different words -- which is used later in the algorithm.
     text <- text %>% str_replace_all(paste0("\\b",phrase,"\\b"), 
-                                     rep("bankword", wordcount(phrase)) %>% 
+                                     rep("blankword", wordcount(phrase)) %>% 
                                        paste(collapse=" "))
   }
-  
+
   # 4. Implement Algorithm -----------------------------------------------------
   if(!quiet) counter_number <<- 1
   
@@ -301,7 +302,6 @@ locate_event_i <- function(text_i,
                            crs_distance,
                            crs_out,
                            quiet,
-                           
                            landmark_list,
                            roads_list,
                            areas_list,
@@ -397,16 +397,16 @@ locate_event_i <- function(text_i,
   
   ## Roads
   # Roads take precedent over landmarks, so OK to do this here.
-  if(nrow(road_match) > 0 & T){
+  if((nrow(road_match) > 0) & (nrow(landmark_match) > 0) & T){
     road_match_sp <- roads[roads$name %in% road_match$matched_words_correct_spelling,]
-    
+
     land_road_restrict <- restrict_landmarks_by_location(landmark_match,
                                                          landmark_gazetteer,
                                                          road_match_sp) 
     landmark_match     <- land_road_restrict$landmark_match
     landmark_gazetteer <- land_road_restrict$landmark_gazetteer
   }
-  
+
   ## Areas
   # Neighborhoods may not take precedent over landmarks. For example, "garden city"
   # matches the "garden" and other garden landmarks. Garden city is not near
@@ -564,7 +564,7 @@ locate_event_i <- function(text_i,
     # ** 4.4 Restrict by roads and neighborhood --------------------------------
     if(!quiet) print("Section - 4.4")
     ## Roads
-    if(nrow(road_match) > 0){
+    if(nrow(road_match) > 0 & nrow(landmark_match) > 0){
       land_road_restrict <- restrict_landmarks_by_location(landmark_match,
                                                            landmark_gazetteer,
                                                            road_match_sp)
@@ -573,7 +573,7 @@ locate_event_i <- function(text_i,
     }
     
     ## Areas
-    if(nrow(area_match) > 0){
+    if(nrow(area_match) > 0 & nrow(landmark_match) > 0){
       area_road_restrict <- restrict_landmarks_by_location(landmark_match,
                                                            landmark_gazetteer,
                                                            area_match_sp)
