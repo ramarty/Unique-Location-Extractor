@@ -76,9 +76,56 @@ After extracting landmarks, the algorithm chooses the correct landmark using a s
 2. Locations that follow the pattern [preposition] [location] are extracted. If multiple occurrences, the location near the higher order preposition is used. If a tie, the location closest to the event word is used. TODO: parameterize which should be prioritized: (1) location to event word or (2) preposition priority. Which one should we default and which should be tie-breaker? Not obvious, for example: `accident towards thika mall at garden city`.
 3. If a junction word is used, two roads are mentioned, and the two roads intersect once, the intersection point is used.
 4. The location closest to the event word is used.
-5. If a landmark is not found, but a road or area are found, the road or area are returned. If a road and area are mentioned, the intersection of the road and area is returned.
+5. If the location name has multiple locations, we (1) restrict to locations near any mentioned road or area, (2) check for a dominant cluster of locations and (3) prioritize certain landmark types over others (e.g., a user is more likely to reference a large, well known location type like a stadium).
+6. If a landmark is not found, but a road or area are found, the road or area are returned. If a road and area are mentioned, the intersection of the road and area is returned.
 
 ##### Parameters
+
+* __landmarks:__ Spatial Points Dataframe (or sf equivalent) of landmarks.
+* __landmarks.name_var:__ Name of variable indicating name of landmark
+* __landmarks.type_var:__ Name of variable indicating type of landmark
+* __grams_min_words:__ Minimum number of words in name to make n/skip-grams out of name
+* __grams_max_words:__ Maximum number of words in name to make n/skip-grams out of name/
+                  Setting a cap helps to reduce spurious landmarks that may come
+                  out of really long names
+* __skip_grams_first_last_word:__ For skip-grams, should first and last word be the
+                             same as the original word? (TRUE/FASLE)
+* __types_remove:__ If landmark has one of these types, remove - unless 'types_always_keep'
+               or 'names_always_keep' prevents removing.
+* __types_always_keep:__ landmark types to always keep. This parameter only becomes
+                    relevant in cases where a landmark has more than one type.
+                    If a landmark has both a "types_remove" and a "types_always_keep"
+                    landmark, this landmark will be kept.
+* __names_always_keep:__ landmark names to always keep. This parameter only
+                   becomes relevant in cases where a landmark is one of
+                    "types_remove." Here, we keep the landmark if "names_always_keep"
+                    is somewhere in the name. For example, if the landmark is
+                    a road but has flyover in the name, we may want to keep
+                    the landmark as flyovers are small spatial areas.
+* __parallel.rm_begin:__ If a landmark name begins with one of these words, add a
+                    landmark that excludes the word.
+* __parallel.rm_end:__ If a landmark name ends with one of these words, add a
+                    landmark that excludes the word.
+* __parallel.rm_begin_iftype:__ If a landmark name begins with one of these words, add a
+                          landmark that excludes the word if the landmark is a
+                           certain type.
+* __parallel.rm_end_iftype:__ If a landmark name ends with one of these words, add a
+                         landmark that excludes the word if the landmark is a
+                         certain type.
+* __parallel.word_diff_iftype:__ If the landmark includes one of these words, add a
+                            landmarks that swap the word for the other words.
+                           Only do if the landmark is a certain type.
+* __parallel.word_end_addtype:__ If the landmark ends with one of these words,
+                            add the type. For example, if landmark is "X stage",
+                           this indicates the landmark is a bus stage. Adding the
+                            "stage" to landmark ensures that the type is reflected.
+* __rm.contains:__ Remove the landmark if it contains one of these words. Implemented
+             after N/skip-grams and parallel landmarks are added.
+* __rm.name_begin:__ Remove the landmark if it begins with one of these words. Implemented
+             after N/skip-grams and parallel landmarks are added.
+* __rm.name_end:__ Remov ethe landmark if it ends with one of these words. Implemented
+              after N/skip-grams and parallel landmarks are added.
+* __crs_distance:__ Coordiante reference system to use for distance calculations.
 
 
 ## Example
