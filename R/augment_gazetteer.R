@@ -249,7 +249,7 @@ augment_gazetteer <- function(landmarks,
   landmarks_grams_nonunique <- landmarks_grams[landmarks_grams$name_N > 1,]
   
   #### Amount non-unique, define as general or specific (looking for dominant spatial cluster)
-  print(length(unique(landmarks_grams_nonunique$name)))
+  if(!quiet) print(length(unique(landmarks_grams_nonunique$name)))
   counter_i <<- 1
   landmarks_grams_nonunique_gs <- lapply(unique(landmarks_grams_nonunique$name), function(name){
     #print(name)
@@ -259,7 +259,9 @@ augment_gazetteer <- function(landmarks,
     
     # where are we?
     counter_i <<- counter_i + 1
-    if((counter_i %% 50) == 0) print(counter_i)
+    if((counter_i %% 50) == 0){
+      if(!quiet)  print(counter_i)
+    }
     
     if(nrow(out) == 0) out <- NULL
     return(out)
@@ -455,7 +457,7 @@ augment_gazetteer <- function(landmarks,
   
   # ** 7.4 General/Specific ----------------------------------------------------
   landmarks$general_specific <- NULL
-  print(length(unique(landmarks$name)))
+  if(!quiet) print(length(unique(landmarks$name)))
   counter_i <<- 1
   landmarks_out <- lapply(unique(landmarks$name), function(name){
     out <- extract_dominant_cluster(landmarks[landmarks$name %in% name,],
@@ -465,7 +467,10 @@ augment_gazetteer <- function(landmarks,
     
     # where are we?
     counter_i <<- counter_i + 1
-    if((counter_i %% 50) == 0) print(counter_i)
+    if((counter_i %% 50) == 0){
+      if(!quiet) print(counter_i)
+    }
+    
     
     if(nrow(out) == 0) out <- NULL
     return(out)
