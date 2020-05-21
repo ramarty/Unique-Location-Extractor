@@ -3,7 +3,7 @@
 # Landmarks
 landmark_gazetteer_orig <- readRDS(file.path(algorithm_inputs, "gazetteers_raw","merged", "gazetter_allsources_raw.Rds"))
 landmark_gazetteer_orig <- landmark_gazetteer_orig[!is.na(landmark_gazetteer_orig$lat),]
-landmark_gazetteer_orig <- landmark_gazetteer_orig[grepl("garden city|yaya center|roasters|pangani", landmark_gazetteer_orig$name),]
+landmark_gazetteer_orig <- landmark_gazetteer_orig[grepl("garden city|yaya center|roasters|pangani|thika mall", landmark_gazetteer_orig$name),]
 coordinates(landmark_gazetteer_orig) <- ~lon+lat
 crs(landmark_gazetteer_orig) <- CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0")
 landmark_gazetteer_orig@data <- landmark_gazetteer_orig@data %>%
@@ -36,7 +36,7 @@ roads <- st_read("https://raw.githubusercontent.com/ramarty/Unique-Location-Extr
 landmarks_aug <- augment_gazetteer(landmarks,
                                    crs_distance = "+init=epsg:21037")
 
-crash_locs <- locate_event(text = c("crash at garden city on thika rd",
+crash_locs <- locate_event(text = c("crash occurred near garden city on thika road on your way towards thika mall",
                                     "crash at pangani"), 
                            landmark_gazetteer = landmarks_aug,
                            areas = neighborhoods,

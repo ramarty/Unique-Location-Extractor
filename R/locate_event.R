@@ -758,7 +758,7 @@ locate_event_i <- function(text_i,
         
         #### Add distance to mentioned road
         if(!is.null(road_match_sp) > 0){
-          df_out$dist_mentioned_road <- gDistance(road_match_agg_sp, df_out) < 500
+          df_out$dist_mentioned_road <- gDistance(road_match_agg_sp, df_out) 
         }
         
         # If no dominant cluster  
