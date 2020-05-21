@@ -27,3 +27,24 @@ areas_sf <- areas_nairobi %>% st_as_sf()
 st_write(landmark_sf, file.path("~/Documents/Github/Unique-Location-Extractor/data/example_landmarks.geojson"), delete_dsn=T)
 st_write(roads_sf, file.path("~/Documents/Github/Unique-Location-Extractor/data/example_roads.geojson"), delete_dsn=T)
 st_write(areas_sf, file.path("~/Documents/Github/Unique-Location-Extractor/data/example_areas.geojson"), delete_dsn=T)
+
+# TEST EXAMPLE
+landmarks <- st_read("https://raw.githubusercontent.com/ramarty/Unique-Location-Extractor/master/data/example_landmarks.geojson")
+neighborhoods <- st_read("https://raw.githubusercontent.com/ramarty/Unique-Location-Extractor/master/data/example_areas.geojson")
+roads <- st_read("https://raw.githubusercontent.com/ramarty/Unique-Location-Extractor/master/data/example_roads.geojson")
+
+landmarks_aug <- augment_gazetteer(landmarks,
+                                   crs_distance = "+init=epsg:21037")
+
+crash_locs <- locate_event(text = "crash at garden city on thika rd", 
+                           landmark_gazetteer = landmarks_aug,
+                           areas = neighborhoods,
+                           roads = roads,
+                           crs_distance = "+init=epsg:21037")
+
+text roads areas crs_distance
+
+
+landmarks %>% as("Spatial") %>% as.data.frame() %>% head()
+
+

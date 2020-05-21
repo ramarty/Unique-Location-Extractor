@@ -17,7 +17,7 @@ augment_gazetteer <- function(landmarks,
                               landmarks.name_var = "name",
                               landmarks.type_var = "type",
                               grams_min_words = 3,
-                              grams_min_words = 6,
+                              grams_max_words = 6,
                               skip_grams_first_last_word = T,
                               types_remove = c("route", "road", "toilet", "political", "locality", "neighborhood"),
                               types_always_keep = c("flyover"),
@@ -82,6 +82,8 @@ augment_gazetteer <- function(landmarks,
   # crs_distance: Coordiante reference system to use for distance calculations.
 
   # 1. Checks ------------------------------------------------------------------
+  if(class(landmarks)[1] %in% "sf") landmarks <- landmarks %>% as("Spatial")
+  
   if(!(class(landmarks)[1] %in% c("SpatialPointsDataFrame", "sf"))){
     stop("landmarks must be a SpatialPointsDataFrame or an sf object")
   }
@@ -96,7 +98,6 @@ augment_gazetteer <- function(landmarks,
     dplyr::select(name, type, number_words)
   
   #### Prep spatial
-  if(class(landmarks)[1] %in% "sf") landmarks <- landmarks %>% as("Spatial")
   landmarks <- spTransform(landmarks, CRS(crs_distance))
   
   # 3. Text Cleaning -----------------------------------------------------------
@@ -143,6 +144,13 @@ augment_gazetteer <- function(landmarks,
     as.data.frame() %>%
     filter(number_words %in% grams_min_words:grams_min_words)
   
+  ## TODO: GENERALIZE!!
+  if(is.null(landmarks_for_ngrams_df$lat[1])){
+    landmarks_for_ngrams_df <- landmarks_for_ngrams_df %>%
+      dplyr::rename(lon = coords.x1,
+                    lat = coords.x2)
+  }
+  
   # Make dataframe, where each row is an n-gram, and includes all the other
   # variables from the landmark dataframe (lat, lon, type, etc)
   n_gram_df <- landmarks_for_ngrams_df %>%
@@ -164,6 +172,13 @@ augment_gazetteer <- function(landmarks,
   landmarks_for_skipgrams_df <- landmarks %>%
     as.data.frame() %>%
     filter(number_words %in% grams_min_words:grams_min_words)
+  
+  ## TODO: GENERALIZE!!
+  if(is.null(landmarks_for_skipgrams_df$lat[1])){
+    landmarks_for_skipgrams_df <- landmarks_for_skipgrams_df %>%
+      dplyr::rename(lon = coords.x1,
+                    lat = coords.x2)
+  }
   
   # Make dataframe, where each row is an n-gram, and includes all the other
   # variables from the landmark dataframe (lat, lon, type, etc)
@@ -292,9 +307,9 @@ augment_gazetteer <- function(landmarks,
     word_combns <- combn(words_i,2)
     
     ## Loop through word pair combinations and swap
-    landmarks_i <- lapply(1:ncol(word_combns), function(i){
-      v1 <- word_combns[,i][1]
-      v2 <- word_combns[,i][2]
+    landmarks_i <- lapply(1:ncol(word_combns), function(ci){
+      v1 <- word_combns[,ci][1]
+      v2 <- word_combns[,ci][2]
       
       landmarks_v1 <- landmarks[grepl(paste0("\\b",v1,"\\b"), landmarks$name) & grepl(type_i, landmarks$type),]
       landmarks_v1$name <- landmarks_v1$name %>% str_replace_all(v1, v2) %>% str_squish
@@ -302,13 +317,15 @@ augment_gazetteer <- function(landmarks,
       landmarks_v2 <- landmarks[grepl(paste0("\\b",v2,"\\b"), landmarks$name) & grepl(type_i, landmarks$type),]
       landmarks_v2$name <- landmarks_v2$name %>% str_replace_all(v2, v1) %>% str_squish
       
-      landmarks_v12 <- list(landmarks_v1, landmarks_v2) %>% do.call(what = "rbind")
+      landmarks_v12 <- list(landmarks_v1, landmarks_v2) %>% purrr::discard(nrow_0) %>% do.call(what = "rbind")
     }) %>%
+      purrr::discard(is.null) %>%
       do.call(what = "rbind")
     
     return(landmarks_i)
     
   }) %>%
+    purrr::discard(is.null) %>% 
     do.call(what="rbind")
   
   # ** 6.4 Replace words with different versions --------------------------------------
@@ -378,6 +395,7 @@ augment_gazetteer <- function(landmarks,
                         par_landmarks.worddiff, 
                         # par_landmarks.slash
                         par_landmarks.rm_endings) %>%
+    purrr::discard(is.null) %>% 
     do.call(what = "rbind")
   
   par_landmarks <- par_landmarks[nchar(par_landmarks$name) >= 3,]

@@ -53,7 +53,7 @@ locate_event <- function(text,
                          fuzzy_match.last_letters_same = TRUE,
                          crs_distance, 
                          crs_out = "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0",
-                         quiet = F){
+                         quiet = T){
   
   # DESCRIPTION: Locate a unique event from text. 
   # ARGS
@@ -98,7 +98,7 @@ locate_event <- function(text,
   
   # TODO: Add additional checks and make sure the error messages make sense.
   
-  if(class(landmark_gazetteer)[1] %in% c("SpatialPointsDataFrame", "sf")){
+  if(!(class(landmark_gazetteer)[1] %in% c("SpatialPointsDataFrame", "sf"))){
     stop("landmark_gazetteer must be a SpatialPointsDataFrame or an sf object")
   }
   
@@ -110,13 +110,13 @@ locate_event <- function(text,
     stop(paste0(landmark_gazetteer.type_var, " is not a variable in landmark_gazetteer"))
   }
   
-  if(is.null(landmark_gazetteer[[general_specific]])){
-    stop(paste0(general_specific, " is not a variable in landmark_gazetteer"))
+  if(is.null(landmark_gazetteer[[landmark_gazetteer.gs_var]])){
+    stop(paste0(landmark_gazetteer.gs_var, " is not a variable in landmark_gazetteer"))
   }
   
-  if(class(roads)[1] %in% c("SpatialPolygonsDataFrame",
+  if(!(class(roads)[1] %in% c("SpatialPolygonsDataFrame",
                                          "SpatialLinesDataFrame",
-                                         "sf")){
+                                         "sf"))){
     stop("roads must be a spatial object")
   }
   
@@ -124,8 +124,8 @@ locate_event <- function(text,
     stop(paste0(roads.name_var, " is not a variable in roads"))
   }
   
-  if(class(areas)[1] %in% c("SpatialPolygonsDataFrame",
-                            "sf")){
+  if(!(class(areas)[1] %in% c("SpatialPolygonsDataFrame",
+                            "sf"))){
     stop("roads must be a SpatialPolygonsDataFrame or an sf object")
   }
   
