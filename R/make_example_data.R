@@ -46,7 +46,14 @@ crash_locs <- locate_event(text = c("crash occurred near garden city on thika ro
                            crs_distance = "+init=epsg:21037",
                            quiet = T)
 
-landmarks_aug[landmarks_aug$name %in% "garden city",]
+roads_w <- roads  %>% spTransform("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0")
+
+leaflet() %>%
+  addTiles() %>%
+  #addPolylines(data=roads_w) %>%
+  addCircles(data=landmarks_aug[landmarks_aug$name %in% "garden city",],
+             color="red") %>%
+  addPolylines(data=roads_nairobi, label = name)
 
 l <- landmarks[grepl("garden city", landmarks$name),] %>% as("Spatial") %>% spTransform("+init=epsg:21037")
 
@@ -68,8 +75,9 @@ leaflet() %>%
 
 
 
-text = "crash at garden city on thika rd"
-landmark_gazetteer = landmarks
+text = "crash occured at garden city on ngong rd"
+text_i = text
+landmark_gazetteer = landmarks_aug
 landmark_gazetteer.name_var = "name"
 landmark_gazetteer.type_var = "type"
 landmark_gazetteer.gs_var = "general_specific"

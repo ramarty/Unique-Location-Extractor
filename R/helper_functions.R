@@ -159,7 +159,7 @@ extract_dominant_cluster <- function(sdf,
 restrict_landmarks_by_location <- function(landmark_match,
                                            landmark_gazetteer,
                                            sdf,
-                                           dist_thresh = 500){
+                                           dist_thresh = 500){ # CHANGE BACK TO 500
   
   # Subset landmark locations by other locations (eg, roads / areas)
   
