@@ -275,7 +275,7 @@ augment_gazetteer <- function(landmarks,
   
   landmarks_grams_nonunique <- landmarks_grams[landmarks_grams$name_N > 1,]
   
-  #### Amount non-unique, define as general or specific (looking for dominant spatial cluster)
+  #### Amoung non-unique, define as general or specific (looking for dominant spatial cluster)
   if(!quiet) print(length(unique(landmarks_grams_nonunique$name)))
   counter_i <<- 1
   landmarks_grams_nonunique_gs <- lapply(unique(landmarks_grams_nonunique$name), function(name){
@@ -301,9 +301,6 @@ augment_gazetteer <- function(landmarks,
   landmarks$general_specific <- NA
   landmarks$name_original <- landmarks$name
   landmarks$name_N <- 1
-  
-  landmarks_grams_unique$name_withslash <- landmarks_grams_unique$name
-  landmarks_grams_nonunique_gs$name_withslash <- landmarks_grams_nonunique_gs$name
   
   landmarks <- list(landmarks,
                     landmarks_grams_unique,
@@ -403,6 +400,7 @@ augment_gazetteer <- function(landmarks,
       return(landmarks_i)
       
     }) %>%
+      purrr::discard(nrow_0) %>% 
       do.call(what="rbind")
   }
   
@@ -421,6 +419,7 @@ augment_gazetteer <- function(landmarks,
       return(landmarks_i)
       
     }) %>%
+      purrr::discard(nrow_0) %>% 
       do.call(what="rbind")
   }
   
@@ -480,6 +479,7 @@ augment_gazetteer <- function(landmarks,
       return(landmarks_i)
       
     }) %>%
+      purrr::discard(nrow_0) %>% 
       do.call(what="rbind")
     
   }
@@ -501,6 +501,7 @@ augment_gazetteer <- function(landmarks,
       return(landmarks_i)
       
     }) %>%
+      purrr::discard(nrow_0) %>% 
       do.call(what="rbind")
   }
   
@@ -564,8 +565,10 @@ augment_gazetteer <- function(landmarks,
   landmarks$name <- gsub("\\|","",landmarks$name)
   
   # ** 7.4 General/Specific ----------------------------------------------------
+  if(!quiet) print("Separating into General and Specific")
+  
   landmarks$general_specific <- NULL
-  if(!quiet) print(length(unique(landmarks$name)))
+  if(!quiet) counter_total <- length(unique(landmarks$name))
   counter_i <<- 1
   landmarks_out <- lapply(unique(landmarks$name), function(name){
     out <- extract_dominant_cluster(landmarks[landmarks$name %in% name,],
@@ -576,7 +579,7 @@ augment_gazetteer <- function(landmarks,
     # where are we?
     counter_i <<- counter_i + 1
     if((counter_i %% 50) == 0){
-      if(!quiet) print(counter_i)
+      if(!quiet) print(paste0(counter_i, " / ", counter_total))
     }
     
     
