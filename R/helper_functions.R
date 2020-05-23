@@ -47,10 +47,10 @@ extract_dominant_cluster_all <- function(landmarks,
                                          return_general_landmarks = "none",
                                          quiet = T){
   
-  
-  landmarks@data <- landmarks@data %>%
-    dplyr::select(name, type) %>%
-    as.data.frame()
+  landmarks$general_specific <- NULL
+  #landmarks@data <- landmarks@data %>%
+  #  dplyr::select(name, type) %>%
+  #  as.data.frame()
   
   # Determine general/specific - - - - - - - - - - - - - - - - - - - - - - - - -
   ## For each unique name, determine an upper bound (maximum possible distance)
@@ -145,10 +145,19 @@ extract_dominant_cluster_all <- function(landmarks,
     landmarks_gs_df_s <- landmarks_gs_df %>% 
       filter(general_specific %in% "specific") %>%
       group_by(name) %>%
-      summarise(lat = mean(lat), # TODO: Is centroid mean or median?
-                lon = mean(lon),
-                type = type %>% str_split(";") %>% unlist %>% paste(collapse = ";")) %>%
+      
+      # ideally would do summarise then summarise_at, but can't. So mutate, then
+      # take the first value in each group
+      mutate_at(vars(-lat, -lon, -name), . %>% str_split(";") %>% unlist %>% unique %>% paste(collapse = ";")) %>%
+      mutate(lat = mean(lat),
+             lon = mean(lon)) %>%
+      summarise_all(. %>% head(1)) %>%
+      
       ungroup()
+    
+    # TODO TEMP FIX to resolve variable difference types: 
+    for(var in names(landmarks_gs_df_s)[!(names(landmarks_gs_df_s) %in% c("lat", "lon"))]) landmarks_gs_df_s[[var]] <- landmarks_gs_df_s[[var]] %>% as.character()
+    for(var in names(landmarks_gs_df_g)[!(names(landmarks_gs_df_g) %in% c("lat", "lon"))]) landmarks_gs_df_g[[var]] <- landmarks_gs_df_g[[var]] %>% as.character()
     
     landmarks_gs <- bind_rows(landmarks_gs_df_g, landmarks_gs_df_s)
     
