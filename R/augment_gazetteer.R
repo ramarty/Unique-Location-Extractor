@@ -2,6 +2,10 @@
 
 # TODO:
 # 1. More efficient way of appending sp objects than do.call(what="rbind")?
+# 2. Make function that wraps this into lapply: extract_dominant_cluster
+# 3. parallel.sep_slash - should consider as any other parallel landmark. Add to
+#     others and determine of should add? Or should that be a consideration here?
+#     e.g., newname, etc?
 
 library(raster)
 library(rgdal)
@@ -16,21 +20,25 @@ library(hunspell)
 augment_gazetteer <- function(landmarks,
                               landmarks.name_var = "name",
                               landmarks.type_var = "type",
-                              grams_min_words = 3,
-                              grams_max_words = 6,
-                              skip_grams_first_last_word = T,
                               types_rm = c("route", "road", "toilet", "political", "locality", "neighborhood"),
                               types_rm.except_with_type = c("flyover"),
                               types_rm.except_with_name = c("flyover"),
+                              grams.min_words = 3,
+                              grams.max_words = 6,
+                              grams.skip_gram_first_last_word_match = T,
+                              grams.add_only_if_name_new = F,
+                              grams.add_only_if_specific = F,
                               parallel.sep_slash = T,
                               parallel.rm_begin = c(stopwords("en"), c("near","at","the", "towards", "near")),
                               parallel.rm_end = c("bar", "shops", "restaurant","sports bar","hotel", "bus station"),
-                              parallel.word_diff = "default", # NOT YET IMPLEMENTED
+                              parallel.word_diff = "default", 
                               parallel.rm_begin_iftype = NULL,
                               parallel.rm_end_iftype = list(list(words = c("stage", "bus stop"), type = "transit_station")),
                               parallel.word_diff_iftype = list(list(words = c("stage", "bus stop", "bus station"), type = "transit_station")),
                               parallel.word_begin_addtype = NULL,
                               parallel.word_end_addtype = list(list(words = c("stage", "bus stop", "bus station"), type = "stage")),
+                              parallel.add_only_if_name_new = F, 
+                              parallel.add_only_if_specific = F, # NOT IMPLEMENTED
                               rm.contains = c("road", "rd"),
                               rm.name_begin = c(stopwords("en"), c("near","at","the", "towards", "near")),
                               rm.name_end = c("highway", "road", "rd", "way", "ave", "avenue", "street", "st"),
@@ -47,7 +55,7 @@ augment_gazetteer <- function(landmarks,
   # grams_max_words: Maximum number of words in name to make n/skip-grams out of name.
   #                  Setting a cap helps to reduce spurious landmarks that may come
   #                  out of really long names
-  # skip_grams_first_last_word: For skip-grams, should first and last word be the
+  # grams.skip_gram_first_last_word_match: For skip-grams, should first and last word be the
   #                             same as the original word? (TRUE/FASLE)
   # types_rm: If landmark has one of these types, remove - unless 'types_always_keep' 
   #               or 'names_always_keep' prevents removing.
@@ -182,7 +190,7 @@ augment_gazetteer <- function(landmarks,
   
   landmarks_for_ngrams_df <- landmarks %>%
     as.data.frame() %>%
-    filter(number_words %in% grams_min_words:grams_max_words)
+    filter(number_words %in% grams.min_words:grams.max_words)
   
   ## TODO: GENERALIZE!!
   if(is.null(landmarks_for_ngrams_df$lat[1])){
@@ -215,12 +223,12 @@ augment_gazetteer <- function(landmarks,
   
   if(!quiet) print("Make N Grams")
   n_gram_df <- make_gram_df_chunks(landmarks_for_ngrams_df, 1000, make_ngram_df)
-    
+  
   #### Skip-grams
   # Grab landmarks to make landmarks from
   landmarks_for_skipgrams_df <- landmarks %>%
     as.data.frame() %>%
-    filter(number_words %in% grams_min_words:grams_max_words)
+    filter(number_words %in% grams.min_words:grams.max_words)
   
   ## TODO: GENERALIZE!!
   if(is.null(landmarks_for_skipgrams_df$lat[1])){
@@ -255,7 +263,7 @@ augment_gazetteer <- function(landmarks,
   if(!quiet) print("Make Skip Grams")
   skip_gram_df <- make_gram_df_chunks(landmarks_for_skipgrams_df, 1000, make_skipgram_df)
   
-  if(skip_grams_first_last_word){
+  if(grams.skip_gram_first_last_word_match){
     skip_gram_df <- skip_gram_df %>%
       filter(word(name_original,1) == word(name,1),
              word(name_original,-1) == word(name,-1))
@@ -283,34 +291,51 @@ augment_gazetteer <- function(landmarks,
   
   landmarks_grams <- landmarks_grams[!remove,]
   
+  #### Remove names if already in landmark dictionary
+  if(grams.add_only_if_name_new){
+    landmarks_grams <- landmarks_grams[!(landmarks_grams$name %in% landmarks$name),]
+  }
+  
   #### Separate into unique/non-unique  
-  # We keep all unique skip grams, then determine which to keep among nonunique grams
-  landmarks_grams_unique    <- landmarks_grams[landmarks_grams$name_N == 1,]
-  landmarks_grams_unique$general_specific <- "specific"
-  
-  landmarks_grams_nonunique <- landmarks_grams[landmarks_grams$name_N > 1,]
-  
-  #### Amoung non-unique, define as general or specific (looking for dominant spatial cluster)
-  if(!quiet) print("N-Grams: General or Specific")
-  if(!quiet) counter_N <- length(unique(landmarks_grams_nonunique$name))
-  counter_i <<- 1
-  landmarks_grams_nonunique_gs <- lapply(unique(landmarks_grams_nonunique$name), function(name){
-    #print(name)
-    out <- extract_dominant_cluster(landmarks_grams_nonunique[landmarks_grams_nonunique$name %in% name,],
-                                    collapse_specific_coords = F,
-                                    return_general_landmarks = "all")
+  if(grams.add_only_if_specific){
+    # We keep all unique skip grams, then determine which to keep among nonunique grams
+    landmarks_grams_unique    <- landmarks_grams[landmarks_grams$name_N == 1,]
+    landmarks_grams_unique$general_specific <- "specific"
     
-    # where are we?
-    counter_i <<- counter_i + 1
-    if((counter_i %% 100) == 0){
-      if(!quiet)  print(paste0(counter_i, " / ", counter_N))
-    }
+    landmarks_grams_nonunique <- landmarks_grams[landmarks_grams$name_N > 1,]
     
-    if(nrow(out) == 0) out <- NULL
-    return(out)
-  }) %>%
-    purrr::discard(is.null) %>%
-    do.call(what="rbind")
+    #### Amoung non-unique, define as general or specific (looking for dominant spatial cluster)
+    if(!quiet) print("N-Grams: General or Specific")
+    if(!quiet) counter_N <- length(unique(landmarks_grams_nonunique$name))
+    counter_i <<- 1
+    landmarks_grams_nonunique_gs <- lapply(unique(landmarks_grams_nonunique$name), function(name){
+      #print(name)
+      out <- extract_dominant_cluster(landmarks_grams_nonunique[landmarks_grams_nonunique$name %in% name,],
+                                      collapse_specific_coords = F,
+                                      return_general_landmarks = "all")
+      
+      # where are we?
+      counter_i <<- counter_i + 1
+      if((counter_i %% 100) == 0){
+        if(!quiet)  print(paste0(counter_i, " / ", counter_N))
+      }
+      
+      if(nrow(out) == 0) out <- NULL
+      return(out)
+    }) %>%
+      purrr::discard(is.null) %>%
+      do.call(what="rbind")
+    
+    landmarks_grams_all <- list(landmarks_grams_unique,
+                                landmarks_grams_nonunique_gs) %>% 
+      do.call(what = "rbind")
+    
+    landmarks_grams_all <- landmarks_grams_all[(landmarks_grams_all$general_specific %in% "specific"),]
+    
+  } else{
+    landmarks_grams_all <- landmarks_grams
+    landmarks_grams_all$general_specific <- NA
+  }
   
   #### Append to landmark dictionary
   ## Ensure have same variables
@@ -319,8 +344,7 @@ augment_gazetteer <- function(landmarks,
   landmarks$name_N <- 1
   
   landmarks <- list(landmarks,
-                    landmarks_grams_unique,
-                    landmarks_grams_nonunique_gs) %>% 
+                    landmarks_grams_all) %>% 
     do.call(what = "rbind")
   
   # 6. Create Parallel Landmarks -----------------------------------------------
@@ -479,7 +503,7 @@ augment_gazetteer <- function(landmarks,
   if(!quiet) print("Create Parallel Landmarks - Add Type")
   
   # **** 6.3.1 Add type if landmark begins with word ---------------------------
-
+  
   if(is.null(parallel.word_begin_addtype)){
     par_landmarks.word_begin_addtype <- NULL
   } else{
@@ -500,7 +524,7 @@ augment_gazetteer <- function(landmarks,
   }
   
   # **** 6.3.2 Add type if landmark ends with word -----------------------------
-
+  
   if(is.null(parallel.word_end_addtype)){
     par_landmarks.word_end_addtype <- NULL
   } else{
@@ -522,27 +546,63 @@ augment_gazetteer <- function(landmarks,
   # ** 6.7 Add parallel landmarks to master list -------------------------------
   if(!quiet) print("Add Parallel Landmarks")
   
-  #### Append and prep parallel landmarks
-  # 1. Some processes of producing parallel landmarks involved removing words. Here,
-  #    we ensure that names meet a minimum length
-  # 2. Only add parallel landmark if name doesn't conflict with existing landmark
-  
-  par_landmarks <- list(par_landmarks.rm_begin, 
-                        par_landmarks.rm_end, 
-                        par_landmarks.word_diff_iftype, 
-                        par_landmarks.rm_begin_iftype, 
-                        par_landmarks.rm_end_iftype, 
-                        par_landmarks.word_diff_iftype, 
-                        par_landmarks.word_begin_addtype, 
-                        par_landmarks.word_end_addtype) %>%
+  #### Parallel landmarks: New Name
+  par_landmarks_newname <- list(par_landmarks.rm_begin, 
+                                par_landmarks.rm_end, 
+                                par_landmarks.word_diff_iftype, 
+                                par_landmarks.rm_begin_iftype, 
+                                par_landmarks.rm_end_iftype, 
+                                par_landmarks.word_diff_iftype) %>%
     purrr::discard(is.null) %>% 
     do.call(what = "rbind")
   
-  par_landmarks <- par_landmarks[nchar(par_landmarks$name) >= 3,]
-  par_landmarks <- par_landmarks[!(par_landmarks$name %in% landmarks$name),]
+  #### Remove if short
+  par_landmarks_newname <- par_landmarks_newname[nchar(par_landmarks_newname$name) >= 3,]
   
-  #### Append to all landmarks
-  landmarks <- list(landmarks, par_landmarks) %>% do.call(what = "rbind")
+  #### Remove if name exists
+  if(parallel.add_only_if_name_new){
+    par_landmarks_newname <- par_landmarks_newname[!(par_landmarks_newname$name %in% landmarks$name),]
+  }
+  
+  #### Remove if general
+  if(parallel.add_only_if_specific){
+    if(!quiet) print("Parallel Landmarks: General Specific Check")
+    
+    par_landmarks_newname$general_specific <- NULL # TODO: Needed? Maybe not...?
+    
+    par_landmarks_newname <- lapply(unique(par_landmarks_newname$name), function(name){
+
+      counter_N <- length(unique(par_landmarks_newname$name))
+      
+      out <- extract_dominant_cluster(par_landmarks_newname[par_landmarks_newname$name %in% name,],
+                                      collapse_specific_coords = F,
+                                      return_general_landmarks = "all")
+      
+      # where are we?
+      counter_i <<- counter_i + 1
+      if((counter_i %% 100) == 0){
+        if(!quiet)  print(paste0(counter_i, " / ", counter_N))
+      }
+      
+      if(nrow(out) == 0) out <- NULL
+      return(out)
+    }) %>%
+      purrr::discard(is.null) %>%
+      do.call(what="rbind")
+    
+    par_landmarks_newname <- par_landmarks_newname[par_landmarks_newname$general_specific %in% "specific",]
+  }
+  
+  #### Parallel landmarks: New Type
+  par_landmarks_newtype <- list(par_landmarks.word_begin_addtype, 
+                                par_landmarks.word_end_addtype) %>%
+    purrr::discard(is.null) %>% 
+    do.call(what = "rbind")
+  
+  #### Append parallel landmarks to master landmarks
+  landmarks <- list(landmarks, par_landmarks_newname, par_landmarks_newtype) %>% 
+    purrr::discard(is.null) %>%  
+    do.call(what = "rbind")
   
   # 7. Final cleaning ----------------------------------------------------------
   if(!quiet) print("Final Cleaning")
@@ -593,6 +653,9 @@ augment_gazetteer <- function(landmarks,
   ## plugging into function
   landmarks_unique <- landmarks[landmarks$N_name %in% 1,]
   landmarks_nonunique <- landmarks[landmarks$N_name > 1,]
+  
+  landmarks_unique$general_specific <- "specific"
+  landmarks_nonunique$general_specific <- NULL
   
   if(!quiet) counter_total <- length(unique(landmarks_nonunique$name))
   counter_i <<- 1
