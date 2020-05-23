@@ -24,8 +24,8 @@ make_gram_df_chunks <- function(df, chunk_size, FUN){
   # Here, we wrap around the function and make it into chunks.
   starts <- seq(from = 1, to = nrow(df), by=chunk_size)
   
-  make_ngram_i <- function(start_i, df, chunk_size){
-    if(!quiet) print(paste0(start_i, "/ ", nrow(df)))
+  make_gram_i <- function(start_i, df, chunk_size){
+    if(!quiet) print(paste0(start_i, " / ", nrow(df)))
     
     end_i <- min((start_i + chunk_size - 1), nrow(df))
     df_i <- df[start_i:end_i,]
@@ -33,10 +33,10 @@ make_gram_df_chunks <- function(df, chunk_size, FUN){
     return(ngram_df_i)
   } 
   
-  n_gram_df_all <- lapply(starts, make_ngram_i, df, chunk_size) %>%
+  gram_df_all <- lapply(starts, make_gram_i, df, chunk_size) %>%
     do.call(what = "rbind")
   
-  return(n_gram_df_all)
+  return(gram_df_all)
 }
 
 extract_dominant_cluster <- function(sdf,

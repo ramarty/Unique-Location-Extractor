@@ -214,7 +214,7 @@ augment_gazetteer <- function(landmarks,
   }
   
   if(!quiet) print("Make N Grams")
-  n_gram_df <- make_ngram_df_chunks(landmarks_for_ngrams_df, 1000, make_ngram_df)
+  n_gram_df <- make_gram_df_chunks(landmarks_for_ngrams_df, 1000, make_ngram_df)
     
   #### Skip-grams
   # Grab landmarks to make landmarks from
@@ -232,7 +232,7 @@ augment_gazetteer <- function(landmarks,
   # Make dataframe, where each row is an n-gram, and includes all the other
   # variables from the landmark dataframe (lat, lon, type, etc)
   make_skipgram_df <- function(df){
-    skip_gram_df <- landmarks_for_skipgrams_df %>%
+    skip_gram_df <- df %>%
       dplyr::pull(name) %>%
       tokens(remove_symbols = F, remove_punct = F) %>% 
       tokens_skipgrams(n=2:3, 
@@ -241,7 +241,7 @@ augment_gazetteer <- function(landmarks,
       as.list() %>%
       lapply(function(x) x %>% t %>% as.data.frame()) %>%
       bind_rows() %>%
-      bind_cols(landmarks_for_skipgrams_df) %>%
+      bind_cols(df) %>%
       dplyr::rename(name_original = name) %>%
       pivot_longer(c(-name_original, -type, -number_words, -lat, -lon),
                    names_to = "name_iter_N", values_to = "name") %>%
@@ -253,7 +253,7 @@ augment_gazetteer <- function(landmarks,
   }
   
   if(!quiet) print("Make Skip Grams")
-  skip_gram_df <- make_ngram_df_chunks(landmarks_for_skipgrams_df, 1000, make_skipgram_df)
+  skip_gram_df <- make_gram_df_chunks(landmarks_for_skipgrams_df, 1000, make_skipgram_df)
   
   if(skip_grams_first_last_word){
     skip_gram_df <- skip_gram_df %>%
