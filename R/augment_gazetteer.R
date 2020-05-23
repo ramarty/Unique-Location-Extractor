@@ -123,7 +123,7 @@ augment_gazetteer <- function(landmarks,
     # Separate landmarks with slashes into multiple slashes. Handles cases with 
     # multiple slashes. For example if: a/b/c, makes three landmarks: a, b and c
     # as three separate rows.
-    if(nrow(landmarks_slash) >= 0){
+    if(nrow(landmarks_slash) >= 1){
       par_landmarks.slash <- lapply(1:nrow(landmarks_slash), function(landmark_i){
         if(!quiet){
           if((landmark_i %% 100) == 0) print(paste0(landmark_i, " / ", nrow(landmarks_slash)))
