@@ -5,7 +5,17 @@
 # 2. Make function that wraps this into lapply: extract_dominant_cluster
 # 3. parallel.sep_slash - should consider as any other parallel landmark. Add to
 #     others and determine of should add? Or should that be a consideration here?
-#     e.g., newname, etc?
+#     e.g., newname, etc? Should separate into unique/nonunique and only implement
+#     on nonunique for efficiency. Other efficiency gains here?? For non-unique,
+#     can we do a group_by to check max distance? I think yes... grab coordinats,
+#     and within group lat/lon min/max, then can quickly say specific. But might
+#     still want to collapse??
+# 4. parallel. if only add if no name conflict or specifc, could add an 
+#    parallel.always_add" parameter.
+# 5. Ordering - group into chunks and think about ordering. What makes sense? What assume?
+#    - Does parallel make sense to go first?
+#    - Maybe: (1) parallel_names, (2) grams, (3) parallel_types
+# 6. Should separapte parallel into parallel_names and parallel_types ??
 
 library(raster)
 library(rgdal)
@@ -35,10 +45,10 @@ augment_gazetteer <- function(landmarks,
                               parallel.rm_begin_iftype = NULL,
                               parallel.rm_end_iftype = list(list(words = c("stage", "bus stop"), type = "transit_station")),
                               parallel.word_diff_iftype = list(list(words = c("stage", "bus stop", "bus station"), type = "transit_station")),
+                              parallel.add_only_if_name_new = T, 
+                              parallel.add_only_if_specific = F, 
                               parallel.word_begin_addtype = NULL,
                               parallel.word_end_addtype = list(list(words = c("stage", "bus stop", "bus station"), type = "stage")),
-                              parallel.add_only_if_name_new = F, 
-                              parallel.add_only_if_specific = F, # NOT IMPLEMENTED
                               rm.contains = c("road", "rd"),
                               rm.name_begin = c(stopwords("en"), c("near","at","the", "towards", "near")),
                               rm.name_end = c("highway", "road", "rd", "way", "ave", "avenue", "street", "st"),
@@ -145,9 +155,23 @@ augment_gazetteer <- function(landmarks,
         return(df_spread)  
       }) %>% do.call(what = "rbind")
       
-      landmarks <- list(landmarks, par_landmarks.slash) %>% do.call(what = "rbind")
+      par_landmarks.slash$name <- par_landmarks.slash$name %>% 
+        str_replace_all("/", " / ") %>%
+        str_replace_all("-", " ") %>%
+        str_replace_all("[[:punct:]]", "") %>%
+        str_replace_all("[^[:alnum:]| ]", "") %>% 
+        str_replace_all("\\|","") %>%
+        str_squish 
+      
+      par_landmarks.slash$general_specific <- NA
+      
+      # We don't add to landmarks yet. We added to list of parallel landmarks
+      # and use decision making rules from parallel as to whether we add. 
+    } else{
+      par_landmarks.slash <- NULL
     } 
     
+    par_landmarks.slash <- NULL
   }
   
   # 3. Text Cleaning -----------------------------------------------------------
@@ -552,7 +576,8 @@ augment_gazetteer <- function(landmarks,
                                 par_landmarks.word_diff_iftype, 
                                 par_landmarks.rm_begin_iftype, 
                                 par_landmarks.rm_end_iftype, 
-                                par_landmarks.word_diff_iftype) %>%
+                                par_landmarks.word_diff_iftype,
+                                par_landmarks.slash) %>%
     purrr::discard(is.null) %>% 
     do.call(what = "rbind")
   
