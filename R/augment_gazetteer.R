@@ -322,40 +322,17 @@ augment_gazetteer <- function(landmarks,
   
   #### Separate into unique/non-unique  
   if(grams.add_only_if_specific){
-    # We keep all unique skip grams, then determine which to keep among nonunique grams
-    landmarks_grams_unique    <- landmarks_grams[landmarks_grams$name_N == 1,]
-    landmarks_grams_unique$general_specific <- "specific"
     
-    landmarks_grams_nonunique <- landmarks_grams[landmarks_grams$name_N > 1,]
+    if(!quiet) print("N/Skip-Grams Landmarks: General Specific Check")
     
-    #### Amoung non-unique, define as general or specific (looking for dominant spatial cluster)
-    if(!quiet) print("N-Grams: General or Specific")
-    if(!quiet) counter_N <- length(unique(landmarks_grams_nonunique$name))
-    counter_i <<- 1
-    landmarks_grams_nonunique_gs <- lapply(unique(landmarks_grams_nonunique$name), function(name){
-      #print(name)
-      out <- extract_dominant_cluster(landmarks_grams_nonunique[landmarks_grams_nonunique$name %in% name,],
-                                      collapse_specific_coords = F,
-                                      return_general_landmarks = "all")
-      
-      # where are we?
-      counter_i <<- counter_i + 1
-      if((counter_i %% 100) == 0){
-        if(!quiet)  print(paste0(counter_i, " / ", counter_N))
-      }
-      
-      if(nrow(out) == 0) out <- NULL
-      return(out)
-    }) %>%
-      purrr::discard(is.null) %>%
-      do.call(what="rbind")
-    
-    landmarks_grams_all <- list(landmarks_grams_unique,
-                                landmarks_grams_nonunique_gs) %>% 
-      do.call(what = "rbind")
-    
-    landmarks_grams_all <- landmarks_grams_all[(landmarks_grams_all$general_specific %in% "specific"),]
-    
+    # TODO: Speed gains if do in chunks, as large spdf slowing things down.
+    # so chunks by name.
+    landmarks_grams_all <- extract_dominant_cluster_all(landmarks_grams,
+                                 collapse_specific_coords = F,
+                                 return_general_landmarks = "none",
+                                 quiet = F)
+    landmarks_grams_all$general_specific <- NA
+
   } else{
     landmarks_grams_all <- landmarks_grams
     landmarks_grams_all$general_specific <- NA
@@ -590,32 +567,16 @@ augment_gazetteer <- function(landmarks,
   }
   
   #### Remove if general
+
+  
   if(parallel.add_only_if_specific){
     if(!quiet) print("Parallel Landmarks: General Specific Check")
     
-    par_landmarks_newname$general_specific <- NULL # TODO: Needed? Maybe not...?
-    
-    par_landmarks_newname <- lapply(unique(par_landmarks_newname$name), function(name){
+    par_landmarks_newname <- extract_dominant_cluster_all(par_landmarks_newname,
+                                                        collapse_specific_coords = F,
+                                                        return_general_landmarks = "none",
+                                                        quiet = F)
 
-      counter_N <- length(unique(par_landmarks_newname$name))
-      
-      out <- extract_dominant_cluster(par_landmarks_newname[par_landmarks_newname$name %in% name,],
-                                      collapse_specific_coords = F,
-                                      return_general_landmarks = "all")
-      
-      # where are we?
-      counter_i <<- counter_i + 1
-      if((counter_i %% 100) == 0){
-        if(!quiet)  print(paste0(counter_i, " / ", counter_N))
-      }
-      
-      if(nrow(out) == 0) out <- NULL
-      return(out)
-    }) %>%
-      purrr::discard(is.null) %>%
-      do.call(what="rbind")
-    
-    par_landmarks_newname <- par_landmarks_newname[par_landmarks_newname$general_specific %in% "specific",]
   }
   
   #### Parallel landmarks: New Type
@@ -666,45 +627,11 @@ augment_gazetteer <- function(landmarks,
   # ** 7.4 General/Specific ----------------------------------------------------
   if(!quiet) print("Separating into General and Specific")
   
-  landmarks$general_specific <- NULL
-  
-  ## Number of times name appears
-  landmarks@data <- landmarks@data %>%
-    group_by(name) %>%
-    mutate(N_name = n()) %>%
-    ungroup()
-  
-  ## If appears once, then specific. Defining this now saves time/avoids
-  ## plugging into function
-  landmarks_unique <- landmarks[landmarks$N_name %in% 1,]
-  landmarks_nonunique <- landmarks[landmarks$N_name > 1,]
-  
-  landmarks_unique$general_specific <- "specific"
-  landmarks_nonunique$general_specific <- NULL
-  
-  if(!quiet) counter_total <- length(unique(landmarks_nonunique$name))
-  counter_i <<- 1
-  landmarks_nu_out <- lapply(unique(landmarks_nonunique$name), function(name){
-    out <- extract_dominant_cluster(landmarks_nonunique[landmarks_nonunique$name %in% name,],
-                                    N_loc_limit = 500,
-                                    collapse_specific_coords = T,
-                                    return_general_landmarks = "all")
-    
-    # where are we?
-    counter_i <<- counter_i + 1
-    if((counter_i %% 100) == 0){
-      if(!quiet) print(paste0(counter_i, " / ", counter_total))
-    }
-    
-    if(nrow(out) == 0) out <- NULL
-    return(out)
-  }) %>%
-    purrr::discard(is.null) %>%
-    do.call(what="rbind")
-  
-  landmarks_out <- list(landmarks_unique, landmarks_nu_out) %>%
-    purrr::discard(is.null)%>%
-    do.call(what="rbind")
+  landmarks_out <- extract_dominant_cluster_all(landmarks,
+                                                N_loc_limit = 500,
+                                                collapse_specific_coords = T,
+                                                return_general_landmarks = "all",
+                                                quiet = F)
   
   # ** 7.5 Variables to output -------------------------------------------------
   landmarks_out@data <- landmarks_out@data %>%

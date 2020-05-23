@@ -39,6 +39,126 @@ make_gram_df_chunks <- function(df, chunk_size, FUN){
   return(gram_df_all)
 }
 
+extract_dominant_cluster_all <- function(landmarks,
+                                         close_thresh_km = 0.5,
+                                         cluster_thresh = 0.9,
+                                         N_loc_limit = 100,
+                                         collapse_specific_coords = F,
+                                         return_general_landmarks = "none",
+                                         quiet = T){
+  
+  
+  landmarks@data <- landmarks@data %>%
+    dplyr::select(name, type) %>%
+    as.data.frame()
+  
+  # Determine general/specific - - - - - - - - - - - - - - - - - - - - - - - - -
+  ## For each unique name, determine an upper bound (maximum possible distance)
+  # between coordinates
+  landmarks_df <- landmarks %>% 
+    as.data.frame %>%
+    group_by(name) %>%
+    mutate(N_name = n(),
+           lat_min = min(lat),
+           lat_max = max(lat),
+           lon_min = min(lon),
+           lon_max = max(lon)) %>%
+    ungroup() %>%
+    mutate(max_dist_km = sqrt((lat_max-lat_min)^2 + (lon_max-lon_min)^2)/1000)
+  
+  ## Split into dataframes where all the landmarks are close versus far
+  landmarks_df_close <- landmarks_df[landmarks_df$max_dist_km <= close_thresh_km,]
+  landmarks_df_far <- landmarks_df[landmarks_df$max_dist_km > close_thresh_km,]
+  
+  ## Among far, determine whether number of landmarks is above/below threshold
+  # for number of landmarks to consider
+  landmarks_df_far_many <- landmarks_df_far[landmarks_df_far$N_name > N_loc_limit,]
+  landmarks_df_far_few <- landmarks_df_far[landmarks_df_far$N_name <= N_loc_limit,]
+  
+  ## Spatiall define & define general/specific
+  if(nrow(landmarks_df_close) > 0){
+    coordinates(landmarks_df_close) <- ~lon+lat
+    crs(landmarks_df_close) <- CRS(as.character(landmarks@proj4string))
+    landmarks_df_close$general_specific <- "specific"
+  } else{
+    landmarks_df_close <- NULL
+  }
+  
+  if(nrow(landmarks_df_far_many) > 0){
+    coordinates(landmarks_df_far_many) <- ~lon+lat
+    crs(landmarks_df_far_many) <- CRS(as.character(landmarks@proj4string))
+    landmarks_df_far_many$general_specific <- "general"
+  } else{
+    landmarks_df_far_many <- NULL
+  }
+  
+  if(return_general_landmarks %in% "none") landmarks_df_far_many <- NULL
+  
+  if(nrow(landmarks_df_far_few) > 0){
+    coordinates(landmarks_df_far_few) <- ~lon+lat
+    crs(landmarks_df_far_few) <- CRS(as.character(landmarks@proj4string))
+    
+    counter_N <- length(unique(landmarks_df_far_few$name))
+    
+    counter_i <- 1
+    
+    #### Break up main dataframe into chunks
+    #N_df <- as.character(unique(landmarks_df_far_few$name)) %>% length()
+    #df_chunk_size = 1000
+    #starts <- seq(from = 1, to = N_df, by = df_chunk_size)
+    
+    landmarks_df_far_few <- lapply(as.character(unique(landmarks_df_far_few$name)), function(name){
+      
+      out <- extract_dominant_cluster(landmarks_df_far_few[landmarks_df_far_few$name %in% name,],
+                                      close_thresh_km =close_thresh_km,
+                                      cluster_thresh = cluster_thresh,
+                                      N_loc_limit = N_loc_limit,
+                                      collapse_specific_coords = collapse_specific_coords,
+                                      return_general_landmarks = return_general_landmarks)
+      
+      # where are we?
+      counter_i <<- counter_i + 1
+      if((counter_i %% 100) == 0){
+        if(!quiet)  print(paste0(counter_i, " / ", counter_N))
+      }
+      
+      if(nrow(out) == 0) out <- NULL
+      return(out)
+    }) %>%
+      purrr::discard(is.null) %>%
+      do.call(what="rbind")
+  } else{
+    landmarks_df_far_few <- NULL
+  }
+  
+  ## Append
+  landmarks_gs <- list(landmarks_df_close, 
+                       landmarks_df_far_many, 
+                       landmarks_df_far_few) %>%
+    purrr::discard(is.null) %>%
+    do.call(what="rbind")
+  
+  # Format Output - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+  if(collapse_specific_coords %in% T){
+    landmarks_gs_df <- landmarks_gs %>% as.data.frame()
+    landmarks_gs_df_g <- landmarks_gs_df %>% filter(general_specific %in% "general")
+    landmarks_gs_df_s <- landmarks_gs_df %>% 
+      filter(general_specific %in% "specific") %>%
+      group_by(name) %>%
+      summarise(lat = mean(lat), # TODO: Is centroid mean or median?
+                lon = mean(lon),
+                type = type %>% str_split(";") %>% unlist %>% paste(collapse = ";")) %>%
+      ungroup()
+    
+    landmarks_gs <- bind_cols(landmarks_gs_df_g, landmarks_gs_df_s)
+    
+    coordinates(landmarks_gs) <- ~lon+lat
+    crs(landmarks_gs) <- CRS(as.character(landmarks@proj4string))
+  }
+  
+  return(landmarks_gs)
+}
+
 extract_dominant_cluster <- function(sdf,
                                      close_thresh_km = 0.5,
                                      cluster_thresh = 0.9,
@@ -83,7 +203,7 @@ extract_dominant_cluster <- function(sdf,
   #                                  "general" (not part of cluster). If no dominant 
   #                                  cluster found, returns all original locations 
   #                                  as "general"
-
+  
   
   # Default output if not cluster is found
   sdf_out <- data.frame(NULL)
@@ -101,7 +221,7 @@ extract_dominant_cluster <- function(sdf,
     sdf_out <- sdf
     sdf_out@data <- sdf_out@data %>%
       dplyr::mutate(general_specific = "specific")
-
+    
     # If locations aren't close and not too many locations...  
   } else if ( (max_dist_km > close_thresh_km) & (nrow(sdf) <= N_loc_limit)){
     
@@ -154,7 +274,7 @@ extract_dominant_cluster <- function(sdf,
       sdf_out_specific_centroid$temp_var <- 1 # dummy var so becomes spatial dataframe
       
       for(var in names(sdf_out)){
-        sdf_out_specific_centroid[[var]] <- sdf_out_specific[[var]] %>% unique %>% paste(collapse=";")
+        sdf_out_specific_centroid[[var]] <- sdf_out_specific[[var]] %>% str_split(";") %>% unlist() %>% unique %>% paste(collapse=";")
       }
       
       sdf_out_specific_centroid$temp_var <- NULL
@@ -211,7 +331,7 @@ restrict_landmarks_by_location <- function(landmark_match,
 
 make_point_small_extent <- function(sdf,
                                     dist_tresh = 500){
-
+  
   sdf_extent <- extent(sdf)
   max_extent_dist <- sqrt((sdf_extent@xmin - sdf_extent@xmax)^2 + (sdf_extent@ymin - sdf_extent@ymax)^2)
   
@@ -283,7 +403,7 @@ phrase_in_sentence_fuzzy_i <- function(sentence,
   # between other words)
   
   remove_words_regex <- paste(paste0("\\b",remove_words,"\\b"), collapse="|")
-
+  
   sentence <- sentence %>% str_replace_all(remove_words_regex, "thisisafillerwordpleaseignoremore") %>% str_squish
   
   #### Checks
@@ -1068,7 +1188,7 @@ find_landmark_similar_name_close_to_road <- function(df_out,
     regex_search <- paste0("\\b", unique(df_out$matched_words_correct_spelling), "\\b") %>% paste(collapse="|")
     
     landmark_gazetteer_subset <- landmark_gazetteer[grepl(regex_search,landmark_gazetteer$name),]
-
+    
     roads_i$id <- 1
     roads_i <- aggregate(roads_i, by="id")
     
