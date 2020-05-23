@@ -19,6 +19,26 @@ bind_rows_sf <- function(...){
   return(sf_appended)
 }
 
+make_gram_df_chunks <- function(df, chunk_size, FUN){
+  # The function for making the gram dataframes can be memory intensive.
+  # Here, we wrap around the function and make it into chunks.
+  starts <- seq(from = 1, to = nrow(df), by=chunk_size)
+  
+  make_ngram_i <- function(start_i, df, chunk_size){
+    if(!quiet) print(paste0(start_i, "/ ", nrow(df)))
+    
+    end_i <- min((start_i + chunk_size - 1), nrow(df))
+    df_i <- df[start_i:end_i,]
+    ngram_df_i <- FUN(df_i)
+    return(ngram_df_i)
+  } 
+  
+  n_gram_df_all <- lapply(starts, make_ngram_i, df, chunk_size) %>%
+    do.call(what = "rbind")
+  
+  return(n_gram_df_all)
+}
+
 extract_dominant_cluster <- function(sdf,
                                      close_thresh_km = 0.5,
                                      cluster_thresh = 0.9,

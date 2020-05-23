@@ -88,6 +88,8 @@ augment_gazetteer <- function(landmarks,
   # crs_out: Coordinate reference system for output. 
   
   # 1. Checks ------------------------------------------------------------------
+  quiet <<- quiet # do I need to do this? sometimes goes into function without defining.
+  
   if(!quiet) print("Checks")
   
   if(class(landmarks)[1] %in% "sf") landmarks <- landmarks %>% as("Spatial")
@@ -189,24 +191,31 @@ augment_gazetteer <- function(landmarks,
                     lat = coords.x2)
   }
   
-  
   # Make dataframe, where each row is an n-gram, and includes all the other
-  # variables from the landmark dataframe (lat, lon, type, etc)
-  n_gram_df <- landmarks_for_ngrams_df %>%
-    dplyr::pull(name) %>%
-    tokens(remove_symbols = F, remove_punct = F) %>% 
-    tokens_ngrams(n=2:3, concatenator = " ") %>% # TODO: parameterize 2:3
-    as.list() %>%
-    lapply(function(x) x %>% t %>% as.data.frame()) %>%
-    bind_rows() %>%
-    bind_cols(landmarks_for_ngrams_df) %>%
-    dplyr::rename(name_original = name) %>%
-    pivot_longer(c(-name_original, -type, -number_words, -lat, -lon),
-                 names_to = "name_iter_N", values_to = "name") %>%
-    filter(!is.na(name)) %>%
-    filter(name != name_original) %>%
-    dplyr::select(-name_iter_N)
+  # variables from the landmark dataframe (lat, lon, type, etc). 
+  make_ngram_df <- function(df){
+    # Function for making an n-gram dataframe
+    n_gram_df <- df %>%
+      dplyr::pull(name) %>%
+      tokens(remove_symbols = F, remove_punct = F) %>% 
+      tokens_ngrams(n=2:3, concatenator = " ") %>% # TODO: parameterize 2:3
+      as.list() %>%
+      lapply(function(x) x %>% t %>% as.data.frame()) %>%
+      bind_rows() %>%
+      bind_cols(df) %>%
+      dplyr::rename(name_original = name) %>%
+      pivot_longer(c(-name_original, -type, -number_words, -lat, -lon),
+                   names_to = "name_iter_N", values_to = "name") %>%
+      filter(!is.na(name)) %>%
+      filter(name != name_original) %>%
+      dplyr::select(-name_iter_N)
+    
+    return(n_gram_df)
+  }
   
+  if(!quiet) print("Make N Grams")
+  n_gram_df <- make_ngram_df_chunks(landmarks_for_ngrams_df, 1000, make_ngram_df)
+    
   #### Skip-grams
   # Grab landmarks to make landmarks from
   landmarks_for_skipgrams_df <- landmarks %>%
@@ -222,23 +231,29 @@ augment_gazetteer <- function(landmarks,
   
   # Make dataframe, where each row is an n-gram, and includes all the other
   # variables from the landmark dataframe (lat, lon, type, etc)
+  make_skipgram_df <- function(df){
+    skip_gram_df <- landmarks_for_skipgrams_df %>%
+      dplyr::pull(name) %>%
+      tokens(remove_symbols = F, remove_punct = F) %>% 
+      tokens_skipgrams(n=2:3, 
+                       skip=0:4, 
+                       concatenator = " ") %>%
+      as.list() %>%
+      lapply(function(x) x %>% t %>% as.data.frame()) %>%
+      bind_rows() %>%
+      bind_cols(landmarks_for_skipgrams_df) %>%
+      dplyr::rename(name_original = name) %>%
+      pivot_longer(c(-name_original, -type, -number_words, -lat, -lon),
+                   names_to = "name_iter_N", values_to = "name") %>%
+      filter(!is.na(name)) %>%
+      filter(name != name_original) %>%
+      dplyr::select(-name_iter_N)
+    
+    return(skip_gram_df)
+  }
   
-  skip_gram_df <- landmarks_for_skipgrams_df %>%
-    dplyr::pull(name) %>%
-    tokens(remove_symbols = F, remove_punct = F) %>% 
-    tokens_skipgrams(n=2:3, 
-                     skip=0:4, 
-                     concatenator = " ") %>%
-    as.list() %>%
-    lapply(function(x) x %>% t %>% as.data.frame()) %>%
-    bind_rows() %>%
-    bind_cols(landmarks_for_skipgrams_df) %>%
-    dplyr::rename(name_original = name) %>%
-    pivot_longer(c(-name_original, -type, -number_words, -lat, -lon),
-                 names_to = "name_iter_N", values_to = "name") %>%
-    filter(!is.na(name)) %>%
-    filter(name != name_original) %>%
-    dplyr::select(-name_iter_N)
+  if(!quiet) print("Make Skip Grams")
+  skip_gram_df <- make_ngram_df_chunks(landmarks_for_skipgrams_df, 1000, make_skipgram_df)
   
   if(skip_grams_first_last_word){
     skip_gram_df <- skip_gram_df %>%
@@ -276,6 +291,7 @@ augment_gazetteer <- function(landmarks,
   landmarks_grams_nonunique <- landmarks_grams[landmarks_grams$name_N > 1,]
   
   #### Amoung non-unique, define as general or specific (looking for dominant spatial cluster)
+  if(!quiet) print("N-Grams: General or Specific")
   if(!quiet) counter_N <- length(unique(landmarks_grams_nonunique$name))
   counter_i <<- 1
   landmarks_grams_nonunique_gs <- lapply(unique(landmarks_grams_nonunique$name), function(name){
@@ -286,7 +302,7 @@ augment_gazetteer <- function(landmarks,
     
     # where are we?
     counter_i <<- counter_i + 1
-    if((counter_i %% 10) == 0){
+    if((counter_i %% 100) == 0){
       if(!quiet)  print(paste0(counter_i, " / ", counter_N))
     }
     
@@ -566,25 +582,40 @@ augment_gazetteer <- function(landmarks,
   if(!quiet) print("Separating into General and Specific")
   
   landmarks$general_specific <- NULL
-  if(!quiet) counter_total <- length(unique(landmarks$name))
+  
+  ## Number of times name appears
+  landmarks@data <- landmarks@data %>%
+    group_by(name) %>%
+    mutate(N_name = n()) %>%
+    ungroup()
+  
+  ## If appears once, then specific. Defining this now saves time/avoids
+  ## plugging into function
+  landmarks_unique <- landmarks[landmarks$N_name %in% 1,]
+  landmarks_nonunique <- landmarks[landmarks$N_name > 1,]
+  
+  if(!quiet) counter_total <- length(unique(landmarks_nonunique$name))
   counter_i <<- 1
-  landmarks_out <- lapply(unique(landmarks$name), function(name){
-    out <- extract_dominant_cluster(landmarks[landmarks$name %in% name,],
+  landmarks_nu_out <- lapply(unique(landmarks_nonunique$name), function(name){
+    out <- extract_dominant_cluster(landmarks_nonunique[landmarks_nonunique$name %in% name,],
                                     N_loc_limit = 500,
                                     collapse_specific_coords = T,
                                     return_general_landmarks = "all")
     
     # where are we?
     counter_i <<- counter_i + 1
-    if((counter_i %% 50) == 0){
+    if((counter_i %% 100) == 0){
       if(!quiet) print(paste0(counter_i, " / ", counter_total))
     }
-    
     
     if(nrow(out) == 0) out <- NULL
     return(out)
   }) %>%
     purrr::discard(is.null) %>%
+    do.call(what="rbind")
+  
+  landmarks_out <- list(landmarks_unique, landmarks_nu_out) %>%
+    purrr::discard(is.null)%>%
     do.call(what="rbind")
   
   # ** 7.5 Variables to output -------------------------------------------------
