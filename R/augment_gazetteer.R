@@ -276,7 +276,7 @@ augment_gazetteer <- function(landmarks,
   landmarks_grams_nonunique <- landmarks_grams[landmarks_grams$name_N > 1,]
   
   #### Amoung non-unique, define as general or specific (looking for dominant spatial cluster)
-  if(!quiet) print(length(unique(landmarks_grams_nonunique$name)))
+  if(!quiet) counter_N <- length(unique(landmarks_grams_nonunique$name))
   counter_i <<- 1
   landmarks_grams_nonunique_gs <- lapply(unique(landmarks_grams_nonunique$name), function(name){
     #print(name)
@@ -286,8 +286,8 @@ augment_gazetteer <- function(landmarks,
     
     # where are we?
     counter_i <<- counter_i + 1
-    if((counter_i %% 50) == 0){
-      if(!quiet)  print(counter_i)
+    if((counter_i %% 10) == 0){
+      if(!quiet)  print(paste0(counter_i, " / ", counter_N))
     }
     
     if(nrow(out) == 0) out <- NULL
@@ -463,8 +463,7 @@ augment_gazetteer <- function(landmarks,
   if(!quiet) print("Create Parallel Landmarks - Add Type")
   
   # **** 6.3.1 Add type if landmark begins with word ---------------------------
-  if(!quiet) print("Section 6.1")
-  
+
   if(is.null(parallel.word_begin_addtype)){
     par_landmarks.word_begin_addtype <- NULL
   } else{
@@ -485,8 +484,7 @@ augment_gazetteer <- function(landmarks,
   }
   
   # **** 6.3.2 Add type if landmark ends with word -----------------------------
-  if(!quiet) print("Section 6.1")
-  
+
   if(is.null(parallel.word_end_addtype)){
     par_landmarks.word_end_addtype <- NULL
   } else{
