@@ -626,7 +626,7 @@ augment_gazetteer <- function(landmarks,
   
   # ** 7.4 General/Specific ----------------------------------------------------
   if(!quiet) print("Separating into General and Specific")
-  
+  #aa <<- landmarks
   landmarks_out <- extract_dominant_cluster_all(landmarks,
                                                 N_loc_limit = 500,
                                                 collapse_specific_coords = T,

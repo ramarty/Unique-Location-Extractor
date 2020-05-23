@@ -150,7 +150,7 @@ extract_dominant_cluster_all <- function(landmarks,
                 type = type %>% str_split(";") %>% unlist %>% paste(collapse = ";")) %>%
       ungroup()
     
-    landmarks_gs <- bind_cols(landmarks_gs_df_g, landmarks_gs_df_s)
+    landmarks_gs <- bind_rows(landmarks_gs_df_g, landmarks_gs_df_s)
     
     coordinates(landmarks_gs) <- ~lon+lat
     crs(landmarks_gs) <- CRS(as.character(landmarks@proj4string))
