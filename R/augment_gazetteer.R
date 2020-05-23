@@ -19,14 +19,17 @@ augment_gazetteer <- function(landmarks,
                               grams_min_words = 3,
                               grams_max_words = 6,
                               skip_grams_first_last_word = T,
-                              types_remove = c("route", "road", "toilet", "political", "locality", "neighborhood"),
-                              types_always_keep = c("flyover"),
-                              names_always_keep = c("flyover"),
+                              types_rm = c("route", "road", "toilet", "political", "locality", "neighborhood"),
+                              types_rm.except_with_type = c("flyover"),
+                              types_rm.except_with_name = c("flyover"),
+                              parallel.sep_slash = T,
                               parallel.rm_begin = c(stopwords("en"), c("near","at","the", "towards", "near")),
                               parallel.rm_end = c("bar", "shops", "restaurant","sports bar","hotel", "bus station"),
-                              parallel.rm_begin_iftype = "", # NOT YET IMPLEMENTED
+                              parallel.word_diff = "default", # NOT YET IMPLEMENTED
+                              parallel.rm_begin_iftype = NULL,
                               parallel.rm_end_iftype = list(list(words = c("stage", "bus stop"), type = "transit_station")),
                               parallel.word_diff_iftype = list(list(words = c("stage", "bus stop", "bus station"), type = "transit_station")),
+                              parallel.word_begin_addtype = NULL,
                               parallel.word_end_addtype = list(list(words = c("stage", "bus stop", "bus station"), type = "stage")),
                               rm.contains = c("road", "rd"),
                               rm.name_begin = c(stopwords("en"), c("near","at","the", "towards", "near")),
@@ -46,15 +49,15 @@ augment_gazetteer <- function(landmarks,
   #                  out of really long names
   # skip_grams_first_last_word: For skip-grams, should first and last word be the
   #                             same as the original word? (TRUE/FASLE)
-  # types_remove: If landmark has one of these types, remove - unless 'types_always_keep' 
+  # types_rm: If landmark has one of these types, remove - unless 'types_always_keep' 
   #               or 'names_always_keep' prevents removing.
-  # types_always_keep: landmark types to always keep. This parameter only becomes
+  # types_rm.except_with_type: landmark types to always keep. This parameter only becomes
   #                    relevant in cases where a landmark has more than one type.
-  #                    If a landmark has both a "types_remove" and a "types_always_keep" 
+  #                    If a landmark has both a "types_rm" and a "types_always_keep" 
   #                    landmark, this landmark will be kept.
-  # names_always_keep: landmark names to always keep. This parameter only
+  # types_rm.except_with_name: landmark names to always keep. This parameter only
   #                    becomes relevant in cases where a landmark is one of 
-  #                    "types_remove." Here, we keep the landmark if "names_always_keep" 
+  #                    "types_rm" Here, we keep the landmark if "names_always_keep" 
   #                    is somewhere in the name. For example, if the landmark is 
   #                    a road but has flyover in the name, we may want to keep 
   #                    the landmark as flyovers are small spatial areas.
@@ -83,9 +86,9 @@ augment_gazetteer <- function(landmarks,
   #              after N/skip-grams and parallel landmarks are added.
   # crs_distance: Coordiante reference system to use for distance calculations.
   # crs_out: Coordinate reference system for output. 
-
+  
   # 1. Checks ------------------------------------------------------------------
-  if(!quiet) print("Section 1")
+  if(!quiet) print("Checks")
   
   if(class(landmarks)[1] %in% "sf") landmarks <- landmarks %>% as("Spatial")
   
@@ -94,7 +97,7 @@ augment_gazetteer <- function(landmarks,
   }
   
   # 2. Prep landmark object ----------------------------------------------------
-  if(!quiet) print("Section 2")
+  if(!quiet) print("Prep Landmark Object")
   
   #### Prep variables
   landmarks$name <- landmarks[[landmarks.name_var]]
@@ -106,17 +109,41 @@ augment_gazetteer <- function(landmarks,
   #### Prep spatial
   landmarks <- spTransform(landmarks, CRS(crs_distance))
   
+  # 3. Initial Parallel Landmarks ----------------------------------------------
+  # These are parallel landmarks that should be added before any cleaning is 
+  # done. For example, these rely on symbols to break up the landmark
+  # e.g., slash (/)
+  
+  if(!quiet) print("Separating Slashes")
+  
+  if(parallel.sep_slash){
+    
+    landmarks_slash <- landmarks[grepl("/", landmarks$name),]
+    
+    # Separate landmarks with slashes into multiple slashes. Handles cases with 
+    # multiple slashes. For example if: a/b/c, makes three landmarks: a, b and c
+    # as three separate rows.
+    if(nrow(landmarks_slash) >= 0){
+      par_landmarks.slash <- lapply(1:nrow(landmarks_slash), function(landmark_i){
+        if(!quiet){
+          if((landmark_i %% 100) == 0) print(paste0(landmark_i, " / ", nrow(landmarks_slash)))
+        } 
+        landmarks_slash_i <- landmarks_slash[landmark_i,]
+        alt_names <- strsplit(landmarks_slash_i$name, "/")[[1]]
+        df_spread <- lapply(1:length(alt_names), function(i) landmarks_slash_i) %>% do.call(what = "rbind")
+        df_spread$name <- alt_names
+        return(df_spread)  
+      }) %>% do.call(what = "rbind")
+      
+      landmarks <- list(landmarks, par_landmarks.slash) %>% do.call(what = "rbind")
+    } 
+    
+  }
+  
   # 3. Text Cleaning -----------------------------------------------------------
-  if(!quiet) print("Section 3")
+  if(!quiet) print("Clean Text")
   
-  # Remove extract whitespace
-  landmarks$name_withslash <- landmarks$name %>% 
-    str_replace_all("/", " / ") %>%
-    #str_replace_all("[[:punct:]]", "") %>%
-    #str_replace_all("[^[:alnum:]| |/]", "") %>% 
-    str_replace_all("\\|","") %>%
-    str_squish 
-  
+  # Clean landmark name
   landmarks$name <- landmarks$name %>% 
     str_replace_all("/", " / ") %>%
     str_replace_all("-", " ") %>%
@@ -126,42 +153,42 @@ augment_gazetteer <- function(landmarks,
     str_squish 
   
   # 4. Remove landmarks --------------------------------------------------------
-  if(!quiet) print("Section 4")
+  if(!quiet) print("Removing landmarks")
   
   #### Landmarks must be 2 or more characters
   landmarks <- landmarks[nchar(landmarks$name) >= 2,]
   
   #### Remove certain types
-  types_remove_regex      <- types_remove      %>% paste(collapse="|") 
-  types_always_keep_regex <- types_always_keep %>% paste(collapse="|") 
-  names_always_keep_regex <- types_always_keep %>% paste(collapse="|") 
+  types_rm_rx                  <- types_rm      %>% paste(collapse="|") 
+  types_rm.except_with_type_rx <- types_rm.except_with_type %>% paste(collapse="|") 
+  types_rm.except_with_name_rx <- types_rm.except_with_name %>% paste(collapse="|") 
   
-  landmarks <- landmarks[!grepl(types_remove_regex, landmarks$type) | 
-                           grepl(types_always_keep_regex, landmarks$type) | 
-                           grepl(names_always_keep_regex, landmarks$name),]
+  landmarks <- landmarks[!grepl(types_rm_rx, landmarks$type) | 
+                           grepl(types_rm.except_with_type_rx, landmarks$type) | 
+                           grepl(types_rm.except_with_name_rx, landmarks$name),]
   
   # 5. N-Grams and Skip-Grams --------------------------------------------------
   
   # ** 5.1 Create N-Grams and Skip-Grams ---------------------------------------
-  if(!quiet) print("Section 5.1")
+  if(!quiet) print("Create N-Grams and Skip-Grams")
   
   #### N-grams
   # Only make ngrams if the number of words in the landmark name is between
   # N_words.min and N_words.max. Additionally, only make n-grams of length 2-3.
   
   # Grab landmarks to make landmarks from
-
+  
   landmarks_for_ngrams_df <- landmarks %>%
     as.data.frame() %>%
     filter(number_words %in% grams_min_words:grams_max_words)
-
+  
   ## TODO: GENERALIZE!!
   if(is.null(landmarks_for_ngrams_df$lat[1])){
     landmarks_for_ngrams_df <- landmarks_for_ngrams_df %>%
       dplyr::rename(lon = coords.x1,
                     lat = coords.x2)
   }
-
+  
   
   # Make dataframe, where each row is an n-gram, and includes all the other
   # variables from the landmark dataframe (lat, lon, type, etc)
@@ -232,7 +259,7 @@ augment_gazetteer <- function(landmarks,
   crs(landmarks_grams) <- CRS(crs_distance)
   
   # ** 5.2 Determine Which N/Skip-Grams to Add to Dictionary -------------------
-  if(!quiet) print("Section 5.2")
+  if(!quiet) print("Add N-Grams and Skip Grams")
   
   #### If two words and one word is one letter, remove
   remove <- (str_count(landmarks_grams$name, "\\S+") %in% 2) &
@@ -285,135 +312,214 @@ augment_gazetteer <- function(landmarks,
   
   # 6. Create Parallel Landmarks -----------------------------------------------
   
-  # ** 6.1 Add type if landmark ends with word ---------------------------------
-  if(!quiet) print("Section 6.1")
+  # ** 6.1 All Landmarks ----------------------------------------------------------
+  if(!quiet) print("Create Parallel Landmarks - All Landmarks")
   
-  par_landmarks.word_end_addtype <- lapply(1:length(parallel.word_end_addtype), function(i){
-    
-    words_i <- paste0("\\b", parallel.word_end_addtype[[i]]$words, "$") %>% paste(collapse = "|")
-    type_i <- parallel.word_end_addtype[[i]]$type
-    
-    landmarks_i <- landmarks[grepl(words_i, landmarks$name),]
-    landmarks_i$type <- paste0(landmarks_i$type, ";", type_i)
-    
-    return(landmarks_i)
-    
-  }) %>%
-    do.call(what="rbind")
-  
-  # ** 6.2 Remove word endings if landmark is certain type ---------------------
-  par_landmarks.rm_end_iftype <- lapply(1:length(parallel.rm_end_iftype), function(i){
-    
-    words_i <- paste0("\\b", parallel.rm_end_iftype[[i]]$words, "$") %>% paste(collapse = "|")
-    type_i <- parallel.rm_end_iftype[[i]]$type
-    
-    landmarks_i <- landmarks[grepl(words_i, landmarks$name) & grepl(type_i, landmarks$type),]
-    landmarks_i$name <- landmarks_i$name %>% str_replace_all(words_i, "") %>% str_squish
-    
-    return(landmarks_i)
-    
-  }) %>%
-    do.call(what="rbind")
-  
-  # ** 6.3 Swap out words if landmark is certain type --------------------------
-  par_landmarks.word_diff_iftype <- lapply(1:length(parallel.word_diff_iftype), function(i){
-    
-    ## Words and types
-    words_i <- parallel.word_diff_iftype[[i]]$words
-    type_i <- parallel.word_diff_iftype[[i]]$type
-    
-    ## All combinations of word pairs
-    word_combns <- combn(words_i,2)
-    
-    ## Loop through word pair combinations and swap
-    landmarks_i <- lapply(1:ncol(word_combns), function(ci){
-      v1 <- word_combns[,ci][1]
-      v2 <- word_combns[,ci][2]
-      
-      landmarks_v1 <- landmarks[grepl(paste0("\\b",v1,"\\b"), landmarks$name) & grepl(type_i, landmarks$type),]
-      landmarks_v1$name <- landmarks_v1$name %>% str_replace_all(v1, v2) %>% str_squish
-      
-      landmarks_v2 <- landmarks[grepl(paste0("\\b",v2,"\\b"), landmarks$name) & grepl(type_i, landmarks$type),]
-      landmarks_v2$name <- landmarks_v2$name %>% str_replace_all(v2, v1) %>% str_squish
-      
-      landmarks_v12 <- list(landmarks_v1, landmarks_v2) %>% purrr::discard(nrow_0) %>% do.call(what = "rbind")
-    }) %>%
-      purrr::discard(is.null) %>%
-      do.call(what = "rbind")
-    
-    return(landmarks_i)
-    
-  }) %>%
-    purrr::discard(is.null) %>% 
-    do.call(what="rbind")
-  
-  # ** 6.4 Replace words with different versions --------------------------------------
-  # e.g., replace "center" with "centre" and vice versa
-
-  word_differences <- read.csv("https://raw.githubusercontent.com/ramarty/Unique-Location-Extractor/master/data/word_differences.csv")
-  
-  par_landmarks.worddiff <- lapply(1:nrow(word_differences), function(i){
-    
-    ## Grab words
-    word_differences_i <- word_differences[i,]
-    version_1 <- word_differences_i$version_1
-    version_2 <- word_differences_i$version_2
-    
-    ## Replace v1 with v2
-    df_v1 <- landmarks[grepl(paste0("\\b",version_1,"\\b"), landmarks$name),]
-    df_v1$name <- gsub(version_1, version_2, df_v1$name)
-    
-    ## Replace v2 with v1
-    df_v2 <- landmarks[grepl(paste0("\\b",version_2,"\\b"), landmarks$name),]
-    df_v2$name <- gsub(version_2, version_1, df_v2$name)
-    
-    ## Append
-    df_out <- list(df_v1, df_v2) %>% purrr::discard(nrow_0) %>% do.call(what = "rbind")
-    
-    return(df_out)
-  }) %>%
-    purrr::discard(is.null) %>%
-    do.call(what = "rbind")
-  
-  # ** 6.5 If beings/ends with certain word/phrase, remove word/phrase ----------------
+  # **** 6.1.1 If beings/ends with certain word/phrase, remove word/phrase -----
   # If ends with words like bar, shops, sports bar, restaurant -- words that people
   # may not use when mentioning landmark --- exclude these words.
   
-  words_rm_begin_regex <- paste0("^", parallel.rm_begin, "\\b") %>% paste(collapse="|")
-  words_rm_end_regex <- paste0("\\b", parallel.rm_end, "$") %>% paste(collapse="|")
+  #### Beginnings
+  if(is.null(parallel.rm_begin)){
+    par_landmarks.rm_begin <- NULL
+  } else{
+    words_rm_begin_rx <- paste0("^", parallel.rm_begin, "\\b") %>% paste(collapse="|")
+    par_landmarks.rm_begin <- landmarks[grepl(words_rm_begin_rx, landmarks$name),]
+    par_landmarks.rm_begin$name <- par_landmarks.rm_begin$name %>% str_replace_all(words_rm_begin_rx, "") %>% str_squish
+  }
   
-  words_remove_regex <- paste(c(words_rm_begin_regex, words_rm_end_regex), collapse = "|")
+  #### Endlings
+  if(is.null(parallel.rm_end)){
+    par_landmarks.rm_end <- NULL
+  } else{
+    words_rm_end_rx <- paste0("\\b", parallel.rm_end, "$") %>% paste(collapse="|")
+    par_landmarks.rm_end <- landmarks[grepl(words_rm_end_rx, landmarks$name),]
+    par_landmarks.rm_end$name <- par_landmarks.rm_end$name %>% str_replace_all(words_rm_end_rx, "") %>% str_squish
+  }
   
-  par_landmarks.rm_endings <- landmarks[grepl(words_remove_regex, landmarks$name),]
-  par_landmarks.rm_endings$name <- par_landmarks.rm_endings$name %>% str_replace_all(words_remove_regex, "") %>% str_squish
+  # **** 6.1.2 Replace words with different versions ---------------------------
+  # e.g., replace "center" with "centre" and vice versa
   
-  # ** 6.6 If landmark has slash, separate into separate landmarks -------------
-  # TODO: None appearing? Eliminating before??
-  if(F){
-    landmarks_with_slash <- landmarks[grepl("/", landmarks$name_withslash),]
+  #### Prep list of words
+  if(is.null(parallel.word_diff)){
+    word_diffs <- NULL
+  } else if(parallel.word_diff %in% "default"){
+    word_diffs <- read.csv("https://raw.githubusercontent.com/ramarty/Unique-Location-Extractor/master/data/word_differences.csv",
+                           stringsAsFactors = F) 
+    word_diffs <- lapply(1:nrow(word_diffs), function(i) c(word_diffs$version_1[i], word_diffs$version_2[i]))
     
-    par_landmarks.slash <- lapply(1:nrow(landmarks_with_slash), function(landmark_i){
-      landmarks_with_slash_i <- landmarks_with_slash[landmark_i,]
-      alt_names <- strsplit(landmarks_with_slash_i$name_withslash, "/")[[1]]
-      df_spread <- lapply(1:length(alt_names), function(i) landmarks_with_slash_i) %>% bind_rows
-      df_spread$name <- alt_names
-      return(df_spread)  
-    }) %>% bind_rows
+    # User defined list
+  } else{
+    word_diffs <- parallel.word_diff
+  }
+  
+  #### Replace words
+  if(is.null(word_diffs)){
+    par_landmarks.word_diff_iftype <- NULL
+  } else{
+    par_landmarks.word_diff_iftype <- lapply(word_diffs, function(words_i){
+      
+      ## All combinations of word pairs
+      word_combns <- combn(words_i,2)
+      
+      ## Loop through word pair combinations and swap
+      landmarks_i <- lapply(1:ncol(word_combns), function(ci){
+        v1 <- word_combns[,ci][1]
+        v2 <- word_combns[,ci][2]
+        
+        landmarks_v1 <- landmarks[grepl(paste0("\\b",v1,"\\b"), landmarks$name),]
+        landmarks_v1$name <- landmarks_v1$name %>% str_replace_all(v1, v2) %>% str_squish
+        
+        landmarks_v2 <- landmarks[grepl(paste0("\\b",v2,"\\b"), landmarks$name),]
+        landmarks_v2$name <- landmarks_v2$name %>% str_replace_all(v2, v1) %>% str_squish
+        
+        landmarks_v12 <- list(landmarks_v1, landmarks_v2) %>% purrr::discard(nrow_0) %>% do.call(what = "rbind")
+      }) %>%
+        purrr::discard(is.null) %>%
+        do.call(what = "rbind")
+      
+      return(landmarks_i)
+      
+    }) %>%
+      purrr::discard(is.null) %>% 
+      do.call(what="rbind")
+  }
+  
+  # ** 6.2 If Landmark is Certain Type -----------------------------------------
+  if(!quiet) print("Create Parallel Landmarks - If Type")
+  
+  # **** 6.2.1 Remove word beginings if landmark is certain type ---------------
+  if(is.null(parallel.rm_begin_iftype)){
+    par_landmarks.rm_begin_iftype <- NULL
+  } else{
+    par_landmarks.rm_begin_iftype <- lapply(1:length(parallel.rm_begin_iftype), function(i){
+      
+      words_i <- paste0("^", parallel.rm_begin_iftype[[i]]$words, "\\b") %>% paste(collapse = "|")
+      type_i <- parallel.rm_begin_iftype[[i]]$type %>% paste(collapse = "|")
+      
+      landmarks_i <- landmarks[grepl(words_i, landmarks$name) & grepl(type_i, landmarks$type),]
+      landmarks_i$name <- landmarks_i$name %>% str_replace_all(words_i, "") %>% str_squish
+      
+      return(landmarks_i)
+      
+    }) %>%
+      do.call(what="rbind")
+  }
+  
+  # **** 6.2.2 Remove word endings if landmark is certain type -----------------
+  if(is.null(parallel.rm_end_iftype)){
+    par_landmarks.rm_end_iftype <- NULL
+  } else{
+    par_landmarks.rm_end_iftype <- lapply(1:length(parallel.rm_end_iftype), function(i){
+      
+      words_i <- paste0("\\b", parallel.rm_end_iftype[[i]]$words, "$") %>% paste(collapse = "|")
+      type_i <- parallel.rm_end_iftype[[i]]$type %>% paste(collapse = "|")
+      
+      landmarks_i <- landmarks[grepl(words_i, landmarks$name) & grepl(type_i, landmarks$type),]
+      landmarks_i$name <- landmarks_i$name %>% str_replace_all(words_i, "") %>% str_squish
+      
+      return(landmarks_i)
+      
+    }) %>%
+      do.call(what="rbind")
+  }
+  
+  # **** 6.2.3 Swap out words if landmark is certain type ----------------------
+  if(is.null(parallel.word_diff_iftype)){
+    par_landmarks.word_diff_iftype <- NULL
+  } else{
+    par_landmarks.word_diff_iftype <- lapply(1:length(parallel.word_diff_iftype), function(i){
+      
+      ## Words and types
+      words_i <- parallel.word_diff_iftype[[i]]$words
+      type_i <- parallel.word_diff_iftype[[i]]$type
+      
+      ## All combinations of word pairs
+      word_combns <- combn(words_i,2)
+      
+      ## Loop through word pair combinations and swap
+      landmarks_i <- lapply(1:ncol(word_combns), function(ci){
+        v1 <- word_combns[,ci][1]
+        v2 <- word_combns[,ci][2]
+        
+        landmarks_v1 <- landmarks[grepl(paste0("\\b",v1,"\\b"), landmarks$name) & grepl(type_i, landmarks$type),]
+        landmarks_v1$name <- landmarks_v1$name %>% str_replace_all(v1, v2) %>% str_squish
+        
+        landmarks_v2 <- landmarks[grepl(paste0("\\b",v2,"\\b"), landmarks$name) & grepl(type_i, landmarks$type),]
+        landmarks_v2$name <- landmarks_v2$name %>% str_replace_all(v2, v1) %>% str_squish
+        
+        landmarks_v12 <- list(landmarks_v1, landmarks_v2) %>% purrr::discard(nrow_0) %>% do.call(what = "rbind")
+      }) %>%
+        purrr::discard(is.null) %>%
+        do.call(what = "rbind")
+      
+      return(landmarks_i)
+      
+    }) %>%
+      purrr::discard(is.null) %>% 
+      do.call(what="rbind")
+  }
+  
+  # ** 6.3 Add Types -----------------------------------------------------------
+  if(!quiet) print("Create Parallel Landmarks - Add Type")
+  
+  # **** 6.3.1 Add type if landmark begins with word ---------------------------
+  if(!quiet) print("Section 6.1")
+  
+  if(is.null(parallel.word_begin_addtype)){
+    par_landmarks.word_begin_addtype <- NULL
+  } else{
+    par_landmarks.word_begin_addtype <- lapply(1:length(parallel.word_begin_addtype), function(i){
+      
+      words_i <- paste0("^", parallel.word_begin_addtype[[i]]$words, "\\b") %>% paste(collapse = "|")
+      type_i <- parallel.word_begin_addtype[[i]]$type
+      
+      landmarks_i <- landmarks[grepl(words_i, landmarks$name),]
+      landmarks_i$type <- paste0(landmarks_i$type, ";", type_i)
+      
+      return(landmarks_i)
+      
+    }) %>%
+      do.call(what="rbind")
+    
+  }
+  
+  # **** 6.3.2 Add type if landmark ends with word -----------------------------
+  if(!quiet) print("Section 6.1")
+  
+  if(is.null(parallel.word_end_addtype)){
+    par_landmarks.word_end_addtype <- NULL
+  } else{
+    par_landmarks.word_end_addtype <- lapply(1:length(parallel.word_end_addtype), function(i){
+      
+      words_i <- paste0("\\b", parallel.word_end_addtype[[i]]$words, "$") %>% paste(collapse = "|")
+      type_i <- parallel.word_end_addtype[[i]]$type
+      
+      landmarks_i <- landmarks[grepl(words_i, landmarks$name),]
+      landmarks_i$type <- paste0(landmarks_i$type, ";", type_i)
+      
+      return(landmarks_i)
+      
+    }) %>%
+      do.call(what="rbind")
   }
   
   # ** 6.7 Add parallel landmarks to master list -------------------------------
+  if(!quiet) print("Add Parallel Landmarks")
   
   #### Append and prep parallel landmarks
   # 1. Some processes of producing parallel landmarks involved removing words. Here,
   #    we ensure that names meet a minimum length
   # 2. Only add parallel landmark if name doesn't conflict with existing landmark
   
-  par_landmarks <- list(par_landmarks.word_end_addtype, 
+  par_landmarks <- list(par_landmarks.rm_begin, 
+                        par_landmarks.rm_end, 
+                        par_landmarks.word_diff_iftype, 
+                        par_landmarks.rm_begin_iftype, 
                         par_landmarks.rm_end_iftype, 
                         par_landmarks.word_diff_iftype, 
-                        par_landmarks.worddiff, 
-                        # par_landmarks.slash
-                        par_landmarks.rm_endings) %>%
+                        par_landmarks.word_begin_addtype, 
+                        par_landmarks.word_end_addtype) %>%
     purrr::discard(is.null) %>% 
     do.call(what = "rbind")
   
@@ -424,6 +530,8 @@ augment_gazetteer <- function(landmarks,
   landmarks <- list(landmarks, par_landmarks) %>% do.call(what = "rbind")
   
   # 7. Final cleaning ----------------------------------------------------------
+  if(!quiet) print("Final Cleaning")
+  
   # Implement a final series of cleaning after different processes have added
   # landmark names. This includes cleaning the text and removing landmarks
   

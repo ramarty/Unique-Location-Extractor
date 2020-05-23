@@ -25,7 +25,7 @@ library(sf)
 tweet <- "crash near airtel on mombasa rd words words words yaya center kenyatta ave westlands"
 
 # Load Data ------------------------------------------------------------------
-AUG_GAZ <- T
+AUG_GAZ <- F
 
 if(AUG_GAZ){
   landmark_gazetteer_orig <- readRDS(file.path(algorithm_inputs, "gazetteers_augmented", "gazetteer_aug.Rds"))
@@ -42,6 +42,8 @@ roads_nairobi <- readRDS(file.path(algorithm_inputs, "roads_augmented", "osm_roa
 areas_nairobi <- readRDS(file.path(algorithm_inputs, "nairobi_estates", "nairobi_estates.Rds"))
 areas_nairobi@data <- areas_nairobi@data %>%
   dplyr::rename(name = estate)
+
+landmarks <- landmark_gazetteer_orig
 
 # Parameters -----------------------------------------------------------------
 prepositions <- list(c("at", "next to","around", "just after", "opposite","opp", "apa", "hapa","happened at","just before","at the","outside","right before"),

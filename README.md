@@ -199,7 +199,7 @@ After extracting landmarks, the algorithm chooses the correct landmark using a s
 * __fuzzy_match.dist:__  Allowable levenstein distances. Vector length must be same as above vector.
 * __fuzzy_match.ngram_max:__  The number of n-grams that should be extracted from text
    to calculate a levensteing distance against landmarks. For example, if the text is
-   composed of 5 words: w1 w2 w3 w4 and fuzzy_match.ngram_max=3, the function extracts
+   composed of 5 words: w1 w2 w3 w4 w5 and fuzzy_match.ngram_max=3, the function extracts
    [w1 w2 w3] and compares the levenstein distance to all landmarks. Then in checks
    [w2 w3 w4], etc.
 * __fuzzy_match.first_letters_same:__  When implementing a fuzzy match, should the first
