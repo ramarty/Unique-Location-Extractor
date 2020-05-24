@@ -30,6 +30,7 @@ library(hunspell)
 augment_gazetteer <- function(landmarks,
                               landmarks.name_var = "name",
                               landmarks.type_var = "type",
+                              close_dist_thresh = 500, # NOT IMPLEMENTED YET
                               types_rm = c("route", "road", "toilet", "political", "locality", "neighborhood"),
                               types_rm.except_with_type = c("flyover"),
                               types_rm.except_with_name = c("flyover"),

@@ -1271,6 +1271,8 @@ determine_location_from_landmark <- function(df_out,
 determine_location_from_intersection <- function(df_out, 
                                                  how_determined_text = ""){
   
+  df_out <- df_out %>% as.data.frame()
+  
   df_out$matched_words_correct_spelling <- paste(df_out$road_correct_spelling_1, df_out$road_correct_spelling_2, sep=",")
   df_out$matched_words_tweet_spelling <- paste(df_out$road_tweet_spelling_1, df_out$road_tweet_spelling_2, sep=",")
   

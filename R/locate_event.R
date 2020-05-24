@@ -725,7 +725,7 @@ locate_event_i <- function(text_i,
           if(TRUE %in% road_intersections_final[[paste0("crashword_prepos_tier_", prep_i)]] & !loc_searched){
             
             df_out <- determine_location_from_intersection(
-              road_intersections_final[road_intersections_final$crashword_prepos_tier_1 %in% TRUE,],
+              road_intersections_final[road_intersections_final[[paste0("crashword_prepos_tier_", prep_i)]] %in% TRUE,],
               paste0("crashword_tier_",prep_i,"_preposition_intersection"))
             
             loc_searched <- TRUE
