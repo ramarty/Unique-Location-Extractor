@@ -616,6 +616,8 @@ extract_locations_after_words <- function(word_loc,
     ## Loop through words after preposition
     for(i in 1:10){
       word_i <- word(text, word_loc+i)
+      if(is.na(word_i)) break
+
       
       # If first word after preposition, the gazetteer word must start with that word.
       # Restrict words in gazetteer, creating a temporary dataframe
@@ -652,12 +654,12 @@ extract_locations_after_words <- function(word_loc,
                location_type = "landmark")
       
       ## Add tweet spelling
-      max_word_length <- landmarks_subset$matched_words_correct_spelling %>% str_count("\\S+") %>% max()
+     # max_word_length <- landmarks_subset$matched_words_correct_spelling %>% str_count("\\S+") %>% max()
       
       landmarks_subset@data <- landmarks_subset@data %>%
         mutate(matched_words_tweet_spelling = word(text,
                                                    word_loc + 1,
-                                                   word_loc + max_word_length))
+                                                   word_loc + i - 1))
       
       landmarks_out <- landmarks_subset@data
     }

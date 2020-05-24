@@ -227,6 +227,8 @@ locate_event <- function(text,
     str_replace_all("\\+", " ") %>%
     str_replace_all("[[:punct:]]", "") %>%
     str_replace_all("\\bamp\\b", "and") %>%
+    str_replace_all("via at.*", "") %>% # remove everything include and after 
+                                        # "via at", which comes at end
     
     # Replace Accronmys
     # TODO: Make this a separate file csv file that gets used
@@ -340,7 +342,7 @@ locate_event_i <- function(text_i,
                            prepositions_all,
                            junction_words_regex){
   
-  text_i %>% as.data.frame() %>% write.csv(paste0("~/Desktop/where_are_we/",Sys.time() %>% str_replace_all("-| |:", ""), ".csv"))
+  #text_i %>% as.data.frame() %>% write.csv(paste0("~/Desktop/where_are_we/",Sys.time() %>% str_replace_all("-| |:", ""), ".csv"))
   
   # 1. Determine Location Matches in Gazetteer ---------------------------------
   if(!quiet) print(text_i)
@@ -489,7 +491,6 @@ locate_event_i <- function(text_i,
   } else{
     locations_in_tweet_prep <- data.frame(NULL) # hacky solution... TODO
   }
-  
   
   # ** 2.4 Remove if landmark already found ---------------------------------------
   if(!quiet) print("Section - 2.4")
