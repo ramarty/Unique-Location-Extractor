@@ -554,6 +554,13 @@ locate_event_i <- function(text_i,
     landmark_match     <- rm_gen_out$landmark_match
     landmark_gazetteer <- rm_gen_out$landmark_gazetteer
     
+    ## Update locations_in_tweet with new landmark dataframe
+    # Keep all roads
+    locations_in_tweet <- locations_in_tweet %>%
+      filter((location_type %in% "road") | 
+               ((location_type %in% "landmark") & 
+                  (matched_words_correct_spelling %in% landmark_match$matched_words_correct_spelling)))
+    
     ## Subset
     locations_in_tweet <- locations_in_tweet %>%
       landmark_road_overlap() %>%
@@ -696,7 +703,7 @@ locate_event_i <- function(text_i,
     if(!quiet) print("Section - 7.2.2")
     #### If there is an intersection word and more than one intersection
     if(grepl(junction_words_regex, text_i) & nrow(road_intersections_final) > 0 & !loc_searched){
-
+      
       df_out <- determine_location_from_intersection(
         road_intersections_final %>% as.data.frame(),
         "intersection_word")
@@ -735,40 +742,44 @@ locate_event_i <- function(text_i,
     if(!quiet) print("Section 7.2.4")
     
     #### Spatially define
-    df_out_sp <- df_out 
-    coordinates(df_out_sp) <- ~lon+lat
-    crs(df_out_sp) <- CRS(crs_distance)
-    
-    #### If dataframe more than one row, collapse to one row
-    df_out$id <- 1
-    df_out <- df_out %>%
-      group_by(id) %>%
-      summarise_all(function(x) x %>% unique %>% paste(collapse = ";")) %>%
-      dplyr::rename(lon_all = lon,
-                    lat_all = lat) %>%
-      dplyr::select(-id)
-    
-    #### Dominant Cluster
-    df_out_sp <- extract_dominant_cluster(df_out_sp)
-    
-    if(nrow(df_out_sp) > 0){
-      coords <- gCentroid(df_out_sp) 
-      coords$id <- 1 # dummy variable so if spatial dataframe
-      coords@data <- df_out %>% as.data.frame() # TODO: Check?
+    if(!is.na(df_out$lat[1])){
       
-      df_out <- coords
+      df_out_sp <- df_out 
+      coordinates(df_out_sp) <- ~lon+lat
+      crs(df_out_sp) <- CRS(crs_distance)
       
-      #### Add distance to mentioned road
-      if(!is.null(road_match_sp) > 0){
-        df_out$dist_mentioned_road <- gDistance(road_match_agg_sp, df_out) 
+      #### If dataframe more than one row, collapse to one row
+      df_out$id <- 1
+      df_out <- df_out %>%
+        group_by(id) %>%
+        summarise_all(function(x) x %>% unique %>% paste(collapse = ";")) %>%
+        dplyr::rename(lon_all = lon,
+                      lat_all = lat) %>%
+        dplyr::select(-id)
+      
+      #### Dominant Cluster
+      df_out_sp <- extract_dominant_cluster(df_out_sp)
+      
+      if(nrow(df_out_sp) > 0){
+        coords <- gCentroid(df_out_sp) 
+        coords$id <- 1 # dummy variable so if spatial dataframe
+        coords@data <- df_out %>% as.data.frame() # TODO: Check?
+        
+        df_out <- coords
+        
+        #### Add distance to mentioned road
+        if(!is.null(road_match_sp) > 0){
+          df_out$dist_mentioned_road <- gDistance(road_match_agg_sp, df_out) 
+        }
+        
+        # If no dominant cluster  
+      } else{
+        df_out <- df_out %>%
+          mutate(lon = NA,
+                 lat = NA,
+                 no_dominant_cluster = T)
       }
       
-      # If no dominant cluster  
-    } else{
-      df_out <- df_out %>%
-        mutate(lon = NA,
-               lat = NA,
-               no_dominant_cluster = T)
     }
     
     if((nrow(roads_final) > 0 | nrow(areas_final) > 0) & !loc_searched){
