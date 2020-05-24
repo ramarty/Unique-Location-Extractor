@@ -96,7 +96,7 @@ leaflet() %>%
 
 ##### Description
 
-The `augment_gazetteer` function adds additional landmarks to account for different ways of saying the same landmark name. For example, raw gazetteers may contain long, formal names, where shorter versions of the name are more often used. In addition, the function facilities removing landmarks names that are spurious or may confuse the algorithm; these include landmark names that are common words that may be used in different contexts, or frequent and generic landmarks such as `hotel`. Key components of the function include:
+The `augment_gazetteer` function adds additional landmarks to account for different ways of saying the same landmark name. For example, raw gazetteers may contain long, formal names, where shorter versions of the name are more often used. In addition, the function facilitates removing landmarks names that are spurious or may confuse the algorithm; these include landmark names that are common words that may be used in different contexts, or frequent and generic landmarks such as `hotel`. Key components of the function include:
 
 1. Adding additional landmarks based off of n-grams and skip-grams of landmark names. For example, from the original landmark `garden city mall`, the following landmarks will be added: `garden city`, `city mall`, and  `garden mall`.
 2. Adding landmarks according to a set of rules: for example, if a landmark starts or ends with a certain word, an alternative version of the landmark is added that removes that word. Here, words along categories of landmarks are removed, where a user may not reference the category; for example, a user will more likely say `McDonalds` than `McDonalds restaurant.`
@@ -105,52 +105,67 @@ The `augment_gazetteer` function adds additional landmarks to account for differ
 
 ##### Parameters
 
+_Landmark Gazetteer_
+
+Parameters for the raw landmark gazetteer.
+
 * __landmarks:__ Spatial Points Dataframe (or sf equivalent) of landmarks.
-* __landmarks.name_var:__ Name of variable indicating name of landmark
-* __landmarks.type_var:__ Name of variable indicating type of landmark
-* __grams_min_words:__ Minimum number of words in name to make n/skip-grams out of name
-* __grams_max_words:__ Maximum number of words in name to make n/skip-grams out of name.
-                  Setting a cap helps to reduce spurious landmarks that may come
-                  out of really long names
-* __skip_grams_first_last_word:__ For skip-grams, should first and last word be the
-                             same as the original word? (TRUE/FASLE)
-* __types_remove:__ If landmark has one of these types, remove - unless 'types_always_keep'
-               or 'names_always_keep' prevents removing.
-* __types_always_keep:__ landmark types to always keep. This parameter only becomes
-                    relevant in cases where a landmark has more than one type.
-                    If a landmark has both a "types_remove" and a "types_always_keep"
-                    landmark, this landmark will be kept.
-* __names_always_keep:__ landmark names to always keep. This parameter only
-                   becomes relevant in cases where a landmark is one of
-                    "types_remove." Here, we keep the landmark if "names_always_keep"
-                    is somewhere in the name. For example, if the landmark is
-                    a road but has flyover in the name, we may want to keep
-                    the landmark as flyovers are small spatial areas.
-* __parallel.rm_begin:__ If a landmark name begins with one of these words, add a
-                    landmark that excludes the word.
-* __parallel.rm_end:__ If a landmark name ends with one of these words, add a
-                    landmark that excludes the word.
-* __parallel.rm_begin_iftype:__ If a landmark name begins with one of these words, add a
-                          landmark that excludes the word if the landmark is a
-                           certain type.
-* __parallel.rm_end_iftype:__ If a landmark name ends with one of these words, add a
-                         landmark that excludes the word if the landmark is a
-                         certain type.
-* __parallel.word_diff_iftype:__ If the landmark includes one of these words, add a
-                            landmarks that swap the word for the other words.
-                           Only do if the landmark is a certain type.
-* __parallel.word_end_addtype:__ If the landmark ends with one of these words,
-                            add the type. For example, if landmark is "X stage",
-                           this indicates the landmark is a bus stage. Adding the
-                            "stage" to landmark ensures that the type is reflected.
-* __rm.contains:__ Remove the landmark if it contains one of these words. Implemented
-             after N/skip-grams and parallel landmarks are added.
-* __rm.name_begin:__ Remove the landmark if it begins with one of these words. Implemented
-             after N/skip-grams and parallel landmarks are added.
-* __rm.name_end:__ Remov ethe landmark if it ends with one of these words. Implemented
-              after N/skip-grams and parallel landmarks are added.
-* __crs_distance:__ Coordiante reference system to use for distance calculations.
+* __landmarks.name_var:__ Name of variable indicating name of landmark (default: "name")
+* __landmarks.type_var:__ Name of variable indicating type of landmark (default: "type")
+
+_Remove Landmark Types_
+
+Removing landmarks based on the type of the landmark. 'types_rm' indicates which types indicate a landmark should be removed, and 'types_rm.except_with_type' and 'types_rm.except_with_name' indicate situations when 'types_rm' should be ignored. Note that a landmark can have more than one type.
+
+* __types_rm:__ If landmark is one of these types, remove the landmark - unless prevented by 'types_rm.except_with_type' or 'types_rm.except_with_name'. Here, types that do not represent a single location are removed. (default: c("route", "road", "political", "locality", "neighborhood")).
+* __types_rm.except_with_type:__ Landmark type to always keep if includes one of these types; overrides 'types_rm'. Includes types that indicate a specific location, even if another type category suggests it covers a larger area. For example, if a landmark has types: 'route' and 'flyover', we want to keep this landmark as flyovers represent specific locations, not longer roads. (default: c("flyover"))
+* __types_rm.except_with_name:__ Landmark type to always keep if the landmark name includes one of these words; overrides 'types_rm'. Includes names that indicate a specific location, even if another type category suggests it covers a larger area. For example, if a landmark has type: 'route' and includes 'flyover' in name, we want to keep this landmark as flyovers represent specific locations, not longer roads. (default: c("flyover"))
+
+_N/Skip-Grams_
+
+Parameters that determine how N and Skip-Grams should be generated and when they should be added to the gazetteer.
+
+* __grams.min_words:__ Minimum number of words in name to make n/skip-grams out of name (default: 2)
+* __grams.max_words:__ Maximum number of words in name to make n/skip-grams out of name. Setting a cap helps to reduce spurious landmarks that may come out of really long names. (default: 6)
+* __grams.skip_gram_first_last_word_match:__ For skip-grams, should first and last word be the
+                             same as the original word? (default: TRUE)
+* __grams.add_only_if_name_new:__ Only add N/skip-grams if these names do not already exist in the gazetteer (default: FALSE)
+* __grams.add_only_if_specific:__ Only add N/skip-grams if the name represents a specific location (ie, not a 'general' landmark with multiple, far away locations) (default: FALSE)
+
+_Parallel Landmarks_
+
+Changes the name of a landmark and adds the landmark as a new landmark to the gazetteer. Parameters indicate when and how to change names, and when parallel landmarks should be added to the gazetteer.
+
+* __parallel.sep_slash:__ If a landmark has a slash, separate the landmark at the slash and add the components as new landmarks. (For example, landmark "a / b / c" will generate three new landmarks: "a", "b" and "c"). (default: TRUE)
+* __parallel.rm_begin:__ If a landmark name begins with one of these words, add a landmark that excludes the word. (default: tm::stopwords("en"))
+* __parallel.rm_end:__ If a landmark name ends with one of these words, add a landmark that excludes the word. (default: c("bar", "shops", "restaurant","sports bar","hotel", "bus station"))
+* __parallel.word_diff:__ Generates parallel landmarks by swapping words with another word in a list. For example, "center" is replaced with "centre". OPTIONS: "none", "default" (accounts for some differences in british and american spelling), list of vectors (e.g., list(c("center", "centre"), c("theater", "theatre"))). (default: "default")
+* __parallel.rm_begin_iftype:__ If a landmark name begins with one of these words, add a landmark that excludes the word if the landmark is a certain type. Input is a list of lists, where each sublist contains a vector of words and a vector of types (e.g., list(list(words = c("a", "b"), type = "t"))) (default: NULL)
+* __parallel.rm_end_iftype:__ If a landmark name ends with one of these words, add a landmark that excludes the word if the landmark is a certain type. Input is a list of lists, where each sublist contains a vector of words and a vector of types (e.g., list(list(words = c("a", "b"), type = "t"))). (default: list(list(words = c("stage", "bus stop", "bus station"), type = "transit_station")).
+* __parallel.word_diff_iftype:__ If the landmark includes one of these words, add a landmarks that swaps the word for the other words. Only do if the landmark is a certain type. (default: list(list(words = c("stage", "bus stop", "bus station"), type = "transit_station")
+* __parallel.add_only_if_name_new:__ Only add parallel landmarks if the name doesn't already exist in the gazetteer (default: TRUE)
+* __parallel.add_only_if_specific:__ Only add parallel landmarks if the landmark name represents a specific location (ie, not a 'general' landmark with multiple, far away locations) (default: FALSE)
+
+_Add Parallel Landmarks: Same name, but add type_
+Add a parallel landmark that includes an additional type
+
+* __parallel_type.word_begin_addtype:__ If the landmark begins with one of these words, add the type. (default: NULL)
+* __parallel_type.word_end_addtype:__ If the landmark ends with one of these words, add the type. For example, if landmark is "X stage", this indicates the landmark is a bus stage. Adding the "stage" to landmark ensures that the type is reflected. (default: list(list(words = c("stage", "bus stop", "bus station"), type = "stage")))
+
+_Remove Landmarks_
+
+After N/Skip-grams and parallel landmarks are added, parameters to decide which landmarks to remove based on the name
+
+* __rm.contains:__ Remove the landmark if it contains one of these words. Implemented after N/skip-grams and parallel landmarks are added. (default: c("road", "rd"))
+* __rm.name_begin:__ Remove the landmark if it begins with one of these words. Implemented after N/skip-grams and parallel landmarks are added. (default: c(stopwords("en"), c("near","at","the", "towards", "near")))
+* __rm.name_end:__ Remove the landmark if it ends with one of these words. Implemented after N/skip-grams and parallel landmarks are added. (default: c("highway", "road", "rd", "way", "ave", "avenue", "street", "st"))
+
+_Other_
+
+* __close_dist_thresh:__ The distance to consider landmarks close together (relevant when generating 'specific' and 'general') landmarks. Distance is in spatial units of 'crs_distance'; if projected, then meters. (default: 500)
+* __crs_distance:__ Coordinate reference system to use for distance calculations.
 * __crs_out:__  Coordinate reference system for output.
+* __quiet:__  Show algorithm progress (default: FALSE)
 
 ## locate_event
 
