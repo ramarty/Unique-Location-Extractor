@@ -53,7 +53,8 @@ locate_event <- function(text,
                          fuzzy_match.last_letters_same = TRUE,
                          crs_distance, 
                          crs_out = "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0",
-                         quiet = T){
+                         quiet = T,
+                         mc_cores = 1){
   
   # DESCRIPTION: Locate a unique event from text. 
   # ARGS
@@ -250,34 +251,65 @@ locate_event <- function(text,
   # 4. Implement Algorithm -----------------------------------------------------
   if(!quiet) counter_number <<- 1
   
-  out_all <- lapply(text,
-                    locate_event_i,
-                    landmark_gazetteer            = landmark_gazetteer, 
-                    roads                          = roads, 
-                    areas                          = areas, 
-                    prepositions_list              = prepositions_list, 
-                    event_words                    = event_words, 
-                    junction_words                 = junction_words, 
-                    false_positive_phrases         = false_positive_phrases, 
-                    type_list                      = type_list, 
-                    clost_dist_thresh              = clost_dist_thresh,
-                    fuzzy_match                    = fuzzy_match,
-                    fuzzy_match.min_word_length    = fuzzy_match.min_word_length,
-                    fuzzy_match.dist               = fuzzy_match.dist,
-                    fuzzy_match.ngram_max          = fuzzy_match.ngram_max,
-                    fuzzy_match.first_letters_same = fuzzy_match.first_letters_same,
-                    fuzzy_match.last_letters_same  = fuzzy_match.last_letters_same,
-                    crs_distance                   = crs_distance,
-                    crs_out                        = crs_out,
-                    quiet                          = quiet,
-                    
-                    landmark_list = landmark_list,
-                    roads_list    = roads_list,
-                    areas_list    = areas_list,
-                    prepositions_all = prepositions_all,
-                    junction_words_regex = junction_words_regex) %>%
-    bind_rows_sf()
-  
+  if(mc_cores = 1){
+    out_all <- lapply(text,
+                      locate_event_i,
+                      landmark_gazetteer            = landmark_gazetteer, 
+                      roads                          = roads, 
+                      areas                          = areas, 
+                      prepositions_list              = prepositions_list, 
+                      event_words                    = event_words, 
+                      junction_words                 = junction_words, 
+                      false_positive_phrases         = false_positive_phrases, 
+                      type_list                      = type_list, 
+                      clost_dist_thresh              = clost_dist_thresh,
+                      fuzzy_match                    = fuzzy_match,
+                      fuzzy_match.min_word_length    = fuzzy_match.min_word_length,
+                      fuzzy_match.dist               = fuzzy_match.dist,
+                      fuzzy_match.ngram_max          = fuzzy_match.ngram_max,
+                      fuzzy_match.first_letters_same = fuzzy_match.first_letters_same,
+                      fuzzy_match.last_letters_same  = fuzzy_match.last_letters_same,
+                      crs_distance                   = crs_distance,
+                      crs_out                        = crs_out,
+                      quiet                          = quiet,
+                      
+                      landmark_list = landmark_list,
+                      roads_list    = roads_list,
+                      areas_list    = areas_list,
+                      prepositions_all = prepositions_all,
+                      junction_words_regex = junction_words_regex) %>%
+      bind_rows_sf()
+  } else{
+    out_all <- pbmclapply(text,
+                      locate_event_i,
+                      landmark_gazetteer            = landmark_gazetteer, 
+                      roads                          = roads, 
+                      areas                          = areas, 
+                      prepositions_list              = prepositions_list, 
+                      event_words                    = event_words, 
+                      junction_words                 = junction_words, 
+                      false_positive_phrases         = false_positive_phrases, 
+                      type_list                      = type_list, 
+                      clost_dist_thresh              = clost_dist_thresh,
+                      fuzzy_match                    = fuzzy_match,
+                      fuzzy_match.min_word_length    = fuzzy_match.min_word_length,
+                      fuzzy_match.dist               = fuzzy_match.dist,
+                      fuzzy_match.ngram_max          = fuzzy_match.ngram_max,
+                      fuzzy_match.first_letters_same = fuzzy_match.first_letters_same,
+                      fuzzy_match.last_letters_same  = fuzzy_match.last_letters_same,
+                      crs_distance                   = crs_distance,
+                      crs_out                        = crs_out,
+                      quiet                          = quiet,
+                      
+                      landmark_list = landmark_list,
+                      roads_list    = roads_list,
+                      areas_list    = areas_list,
+                      prepositions_all = prepositions_all,
+                      junction_words_regex = junction_words_regex,
+                      mc.cores = mc_cores) %>%
+      bind_rows_sf()
+  }
+
   st_crs(out_all) <- crs_out
   
   return(out_all)
@@ -307,6 +339,8 @@ locate_event_i <- function(text_i,
                            areas_list,
                            prepositions_all,
                            junction_words_regex){
+  
+  text_i %>% as.data.frame() %>% write.csv(paste0("~/Desktop/where_are_we/",Sys.time() %>% str_replace_all("-| |:", ""), ".csv"))
   
   # 1. Determine Location Matches in Gazetteer ---------------------------------
   if(!quiet) print(text_i)
