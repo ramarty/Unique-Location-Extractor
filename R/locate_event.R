@@ -512,6 +512,10 @@ locate_event_i <- function(text_i,
   
   # 4. Choosing which landmarks to use -----------------------------------------
   if(!quiet) print("Section - 4")
+  
+  df_out <- data.frame(lat = NA,
+                       lon = NA)
+  
   df_out <- data.frame(matrix(nrow=1,ncol=0))
   
   ## Original Landmarks
@@ -688,8 +692,7 @@ locate_event_i <- function(text_i,
     if(!quiet) print("Section - 7.2")
     ## Null output
     
-    df_out <- data.frame(lat = NA,
-                         lon = NA)
+
     
     loc_searched <- FALSE
     
