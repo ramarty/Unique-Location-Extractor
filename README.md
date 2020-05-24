@@ -43,7 +43,7 @@ source("https://raw.githubusercontent.com/ramarty/Unique-Location-Extractor/mast
 
 ## Main functions
 
-The package contains two main functions: `augment_gazetteer` and `locate_event`. The backbone of locating events is looking up location references in a gazetteer, or a geographic dictionary. The `augment_gazetteer` facilitates cleaning a gazetteer that may have been constructed from sources such as Open Street Maps, Geonames or Google Maps. It is specifically design to clean a dictionary of point locations/landmarks. The `locate_event` function then uses the gazetteer. `locate_event` takes text as input and returns the location of the relevant event.
+The package contains two main functions: `augment_gazetteer` and `locate_event`. The backbone of locating events is looking up location references in a gazetteer, or a geographic dictionary. The `augment_gazetteer` facilitates cleaning a gazetteer that may have been constructed from sources such as [Open Street Maps](https://cran.r-project.org/web/packages/osmdata/vignettes/osmdata.html), [Geonames](https://github.com/ropensci/geonames) or [Google Maps](https://www.rdocumentation.org/packages/googleway/versions/2.7.1/topics/google_places). It is specifically design to clean a dictionary of point locations/landmarks. The `locate_event` function then uses the gazetteer. `locate_event` takes text as input and returns the location of the relevant event.
 
 ## Example
 
