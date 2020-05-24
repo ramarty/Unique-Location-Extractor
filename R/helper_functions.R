@@ -1172,6 +1172,7 @@ snap_landmark_to_road <- function(df_out,
 find_landmark_similar_name_close_to_road <- function(df_out, 
                                                      roads,
                                                      roads_final,
+                                                     landmark_gazetteer,
                                                      crs_distance){
   # Find other landmarks with similar name as landmarks in df_out that might
   # be near the road. Here, we start with the landmark names in df_out. If
@@ -1257,7 +1258,7 @@ determine_location_from_landmark <- function(df_out,
   
   if(length(unique(df_out$matched_words_correct_spelling)) > 1) df_out <- choose_between_multiple_landmarks(df_out, roads, roads_final, crs_distance)
   if(nrow(df_out) > 1) df_out <- choose_between_landmark_same_name(df_out, roads, roads_final, crs_distance)
-  if(nrow(roads_final) %in% 1) df_out <- find_landmark_similar_name_close_to_road(df_out, roads, roads_final, crs_distance)
+  if(nrow(roads_final) %in% 1) df_out <- find_landmark_similar_name_close_to_road(df_out, roads, roads_final, landmark_gazetteer, crs_distance)
   if(nrow(roads_final) %in% 1) df_out <- snap_landmark_to_road(df_out, roads, roads_final, crs_distance)
   
   df_out$type <- "landmark"
