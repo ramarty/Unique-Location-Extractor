@@ -516,7 +516,7 @@ locate_event_i <- function(text_i,
   df_out <- data.frame(lat = NA,
                        lon = NA)
   
-  df_out <- data.frame(matrix(nrow=1,ncol=0))
+  #df_out <- data.frame(matrix(nrow=1,ncol=0))
   
   ## Original Landmarks
   # Before any subsetting, save locations dataframe. Add all locations originally
