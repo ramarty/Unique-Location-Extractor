@@ -13,32 +13,10 @@ This package was originally developed to extract locations of road traffic crash
 
 ## Installation
 
-``` r
-## Dependencies
-library(magrittr)
-library(lubridate)
-library(dplyr)
-library(tidyr)
-library(readr)
-library(purrr)
-library(tidytext)
-library(stringr)
-library(stringi)
-library(ngram)
-library(hunspell)
-library(stringdist)
-library(tm)
-library(raster)
-library(rgeos)
-library(parallel)
-library(jsonlite)
-library(maptools)
-library(sf)
+Until the package is made available via devtools (coming soon!), the functions can be loaded by running the following script
 
-## Load functions
-source("https://raw.githubusercontent.com/ramarty/Unique-Location-Extractor/master/R/helper_functions.R")
-source("https://raw.githubusercontent.com/ramarty/Unique-Location-Extractor/master/R/augment_gazetteer.R")
-source("https://raw.githubusercontent.com/ramarty/Unique-Location-Extractor/master/R/locate_event.R")
+``` r
+source("https://raw.githubusercontent.com/ramarty/Unique-Location-Extractor/master/R/load_ulex.R")
 ```
 
 ## Main functions
