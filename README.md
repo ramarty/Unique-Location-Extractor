@@ -115,7 +115,7 @@ Parameters for the raw landmark gazetteer.
 
 _Remove Landmark Types_
 
-Removing landmarks based on the type of the landmark. 'types_rm' indicates which types indicate a landmark should be removed, and 'types_rm.except_with_type' and 'types_rm.except_with_name' indicate situations when 'types_rm' should be ignored. Note that a landmark can have more than one type.
+Removing landmarks based on the type of the landmark. 'types_rm' indicates which types of landmarks should be removed, and 'types_rm.except_with_type' and 'types_rm.except_with_name' indicate situations when 'types_rm' should be ignored. Note that a landmark can have more than one type.
 
 * __types_rm:__ If landmark is one of these types, remove the landmark - unless prevented by 'types_rm.except_with_type' or 'types_rm.except_with_name'. Here, types that do not represent a single location are removed. (default: c("route", "road", "political", "locality", "neighborhood")).
 * __types_rm.except_with_type:__ Landmark type to always keep if includes one of these types; overrides 'types_rm'. Includes types that indicate a specific location, even if another type category suggests it covers a larger area. For example, if a landmark has types: 'route' and 'flyover', we want to keep this landmark as flyovers represent specific locations, not longer roads. (default: c("flyover"))
@@ -147,6 +147,7 @@ Changes the name of a landmark and adds the landmark as a new landmark to the ga
 * __parallel.add_only_if_specific:__ Only add parallel landmarks if the landmark name represents a specific location (ie, not a 'general' landmark with multiple, far away locations) (default: FALSE)
 
 _Add Parallel Landmarks: Same name, but add type_
+
 Add a parallel landmark that includes an additional type
 
 * __parallel_type.word_begin_addtype:__ If the landmark begins with one of these words, add the type. (default: NULL)
