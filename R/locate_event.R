@@ -251,7 +251,7 @@ locate_event <- function(text,
   # 4. Implement Algorithm -----------------------------------------------------
   if(!quiet) counter_number <<- 1
   
-  if(mc_cores = 1){
+  if(mc_cores == 1){
     out_all <- lapply(text,
                       locate_event_i,
                       landmark_gazetteer            = landmark_gazetteer, 
