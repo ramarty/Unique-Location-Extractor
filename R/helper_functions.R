@@ -40,7 +40,7 @@ make_gram_df_chunks <- function(df, chunk_size, FUN){
 }
 
 extract_dominant_cluster_all <- function(landmarks,
-                                         close_thresh_km = 0.5,
+                                         close_thresh_km = 0.75,
                                          cluster_thresh = 0.67,
                                          N_loc_limit = 100,
                                          collapse_specific_coords = F,
@@ -169,7 +169,7 @@ extract_dominant_cluster_all <- function(landmarks,
 }
 
 extract_dominant_cluster <- function(sdf,
-                                     close_thresh_km = 0.5,
+                                     close_thresh_km = 0.75,
                                      cluster_thresh = 0.67,
                                      N_loc_limit = 100,
                                      collapse_specific_coords = F,
