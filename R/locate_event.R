@@ -440,7 +440,8 @@ locate_event_i <- function(text_i,
   
   ## Roads
   # Roads take precedent over landmarks, so OK to do this here.
-  if((nrow(road_match) > 0) & (nrow(landmark_match) > 0) & T){
+  # Fails in case where "accident at pangani towards muaranga rd", where pangani not near muranga rd and muranga is a landmark
+  if((nrow(road_match) > 0) & (nrow(landmark_match) > 0) & F){
     road_match_sp <- roads[roads$name %in% road_match$matched_words_correct_spelling,]
     
     land_road_restrict <- restrict_landmarks_by_location(landmark_match,
@@ -533,6 +534,26 @@ locate_event_i <- function(text_i,
   
   if(nrow(locations_in_tweet) > 0){
     
+    # ** 4.0 Add Preposition Variables to Dataframe ----------------------------
+    if(!quiet) print("Section - 4.0")
+    # Loop through preposition tiers
+    for(i in 1:length(prepositions_list)){
+      
+      prepositions <- prepositions_list[[i]]
+      
+      #### locations_in_tweet dataframe
+      locations_in_tweet[[paste0("crashword_prepos_tier_", i)]] <- 
+        search_crashword_prepos(text_i, locations_in_tweet$matched_words_tweet_spelling, event_words, prepositions)
+      
+      locations_in_tweet[[paste0("crashword_other_prepos_tier_", i)]] <- 
+        search_crashword_other_prepos(text_i, locations_in_tweet$matched_words_tweet_spelling, event_words, prepositions)
+      
+      locations_in_tweet[[paste0("prepos_before_crashword_tier_", i)]] <- 
+        search_prep_loc(text_i, locations_in_tweet$matched_words_tweet_spelling, prepositions)
+      
+    }
+    
+    
     # ** 4.1 Location Dataset Prep ------------------------------------------------
     if(!quiet) print("Section - 4.1")
     # Prep location datasets before continuing with search
@@ -608,8 +629,26 @@ locate_event_i <- function(text_i,
       
     }
     
+
     # ** 4.3 Restrict Locations/Landmarks to Consider --------------------------
     if(!quiet) print("Section - 4.3")
+    ## Subset
+    locations_in_tweet <- locations_in_tweet %>%
+      landmark_road_overlap() %>%
+      exact_fuzzy_overlap() %>%
+      phase_overlap() %>%
+      exact_fuzzy_startendsame()
+    
+    ## Keep, despite ignoring general and roads/areas restriction
+    vars_for_alws_keep <- names(locations_in_tweet)[grepl("crashword_prepos_tier_", names(locations_in_tweet))]
+    tokeep_01 <- locations_in_tweet[,vars_for_alws_keep] %>% rowSums() %>% as.vector()
+    locations_in_tweet_alw_keep <- locations_in_tweet[tokeep_01 %in% 1,]
+    if(nrow(locations_in_tweet_alw_keep) >= 1){
+      landmark_gazetteer_alw_keep <- landmark_gazetteer[landmark_gazetteer$name %in% locations_in_tweet_alw_keep$matched_words_correct_spelling,]
+    } else{
+      landmark_gazetteer_alw_keep <- NULL
+    }
+    
     ## Remove general landmarks
     # type_list // except_if_type parameter
     rm_gen_out <- remove_general_landmarks(landmark_match,
@@ -626,15 +665,12 @@ locate_event_i <- function(text_i,
                ((location_type %in% "landmark") & 
                   (matched_words_correct_spelling %in% landmark_match$matched_words_correct_spelling)))
     
-    ## Subset
-    locations_in_tweet <- locations_in_tweet %>%
-      landmark_road_overlap() %>%
-      exact_fuzzy_overlap() %>%
-      phase_overlap() %>%
-      exact_fuzzy_startendsame()
-    
+
     # ** 4.4 Restrict by roads and neighborhood --------------------------------
     if(!quiet) print("Section - 4.4")
+    
+    landmark_match <- landmark_match[landmark_match$matched_words_correct_spelling %in% locations_in_tweet$matched_words_correct_spelling,]
+
     ## Roads
     if(nrow(road_match) > 0 & nrow(landmark_match) > 0){
       land_road_restrict <- restrict_landmarks_by_location(landmark_match,
@@ -659,6 +695,13 @@ locate_event_i <- function(text_i,
                ((location_type %in% "landmark") & 
                   (matched_words_correct_spelling %in% landmark_match$matched_words_correct_spelling)))
     
+    #### Add always keep
+    locations_in_tweet <- bind_rows(locations_in_tweet, locations_in_tweet_alw_keep)
+    landmark_gazetteer <- list(landmark_gazetteer, 
+                               landmark_gazetteer_alw_keep) %>%
+      purrr::discard(is.null) %>%
+      do.call(what = "rbind")
+
     # 5. Find Intersections ----------------------------------------------------
     if(!quiet) print("Section - 5")
     road_intersections <- extract_intersections(locations_in_tweet, roads)
