@@ -41,7 +41,7 @@ make_gram_df_chunks <- function(df, chunk_size, FUN){
 
 extract_dominant_cluster_all <- function(landmarks,
                                          close_thresh_km = 0.5,
-                                         cluster_thresh = 0.9,
+                                         cluster_thresh = 0.67,
                                          N_loc_limit = 100,
                                          collapse_specific_coords = F,
                                          return_general_landmarks = "none",
@@ -170,7 +170,7 @@ extract_dominant_cluster_all <- function(landmarks,
 
 extract_dominant_cluster <- function(sdf,
                                      close_thresh_km = 0.5,
-                                     cluster_thresh = 0.9,
+                                     cluster_thresh = 0.67,
                                      N_loc_limit = 100,
                                      collapse_specific_coords = F,
                                      return_general_landmarks = "none"){
@@ -245,7 +245,7 @@ extract_dominant_cluster <- function(sdf,
     if(cluster_exists){
       # Extract columns where more than X % are close together
       close_thresh_km_closeTF <- sdf_dist_mat <= close_thresh_km
-      in_dominant_cluster <- (colSums(close_thresh_km_closeTF) / nrow(close_thresh_km_closeTF) >= .9)
+      in_dominant_cluster <- (colSums(close_thresh_km_closeTF) / nrow(close_thresh_km_closeTF) >= cluster_thresh)
       
       if(return_general_landmarks %in% c("none", "only_if_all_general")){
         sdf <- sdf[in_dominant_cluster,]

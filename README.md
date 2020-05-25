@@ -141,7 +141,7 @@ After N/Skip-grams and parallel landmarks are added, parameters to decide which 
 
 _Other_
 
-* __close_dist_thresh:__ The distance to consider landmarks close together (relevant when generating 'specific' and 'general') landmarks. Distance is in spatial units of 'crs_distance'; if projected, then meters. (default: 500)
+* __close_dist_thresh:__ The distance to consider landmarks close together; relevant when generating 'specific' and 'general' landmarks. Distance is in spatial units of 'crs_distance'; if projected, then meters. (default: 500)
 * __crs_distance:__ Coordinate reference system to use for distance calculations.
 * __crs_out:__  Coordinate reference system for output. (default: "+init=epsg:4326")
 * __quiet:__  Show algorithm progress (default: FALSE)

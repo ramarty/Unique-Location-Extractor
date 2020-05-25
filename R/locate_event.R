@@ -165,9 +165,6 @@ locate_event <- function(text,
     landmark_gazetteer <- landmark_gazetteer_spdf
   }
   
-  # Before subsetting
-  landmark_gazetteer_orig <- landmark_gazetteer
-  
   #### Project Data
   landmark_gazetteer <- spTransform(landmark_gazetteer, CRS(crs_distance))
   roads              <- spTransform(roads,              CRS(crs_distance))
@@ -347,6 +344,9 @@ locate_event_i <- function(text_i,
   
   #text_i %>% as.data.frame() %>% write.csv(paste0("~/Desktop/where_are_we/",Sys.time() %>% str_replace_all("-| |:", ""), ".csv"))
   
+  
+  # Before subsetting
+  landmark_gazetteer_orig <- landmark_gazetteer
   # 1. Determine Location Matches in Gazetteer ---------------------------------
   if(!quiet) print(text_i)
   

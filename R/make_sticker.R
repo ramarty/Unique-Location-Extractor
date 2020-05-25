@@ -19,13 +19,13 @@ areas_nairobi@data <- areas_nairobi@data %>%
   dplyr::rename(name = estate)
 
 #### Subset
-area_sub <- areas_nairobi[1:40,]
+area_sub <- areas_nairobi[1:40,] # 1:40
 area_sub_buff <- gBuffer(area_sub, width=1/111.12, byid=F)
 area_sub_buff$id <- 1
 roads_sub <- roads_nairobi %>% crop(area_sub)
 landmarks_sub <- landmark_gazetteer_orig %>% crop(area_sub)
 landmarks_sub <- landmarks_sub[order(runif(nrow(landmarks_sub))),]
-landmarks_sub <- landmarks_sub[1:50,] %>% as.data.frame()
+landmarks_sub <- landmarks_sub[1:50,] %>% as.data.frame() # 1:50
 
 center_df <- gCentroid(area_sub) %>% as.data.frame()
 
