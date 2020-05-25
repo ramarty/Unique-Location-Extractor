@@ -170,7 +170,7 @@ extract_dominant_cluster_all <- function(landmarks,
 
 extract_dominant_cluster <- function(sdf,
                                      close_thresh_km = 0.75,
-                                     cluster_thresh = 0.67,
+                                     cluster_thresh = 0.624,
                                      N_loc_limit = 100,
                                      collapse_specific_coords = F,
                                      return_general_landmarks = "none"){
@@ -238,7 +238,6 @@ extract_dominant_cluster <- function(sdf,
     sdf_dist_mat <- gDistance(sdf, byid=T) / 1000
     
     # Check if cluster exists
-    sdf_dist_mat_list <- sdf_dist_mat %>% as.list %>% unlist
     cluster_exists <- mean(sdf_dist_mat_list <= close_thresh_km) >= cluster_thresh
     
     # If cluster exists, extract coordinates of dominant cluster

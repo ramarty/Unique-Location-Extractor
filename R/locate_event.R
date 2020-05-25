@@ -669,6 +669,7 @@ locate_event_i <- function(text_i,
       }
     } else{
       landmark_gazetteer_alw_keep <- NULL
+      locations_in_tweet_alw_keep <- data.frame(NULL)
     }
     
     landmark_match <- landmark_match[landmark_match$matched_words_correct_spelling %in% locations_in_tweet$matched_words_correct_spelling,]
@@ -676,7 +677,7 @@ locate_event_i <- function(text_i,
     ## Restricts gazetteer by type
     # Do before restrict by general, as here checks for, within
     # a general landmark, is there specific within our type_list?
-    if(!is.null(type_list)){
+    if(!is.null(type_list) & nrow(landmark_match) > 0){
       landmark_gazetteer <- remove_gaz_by_type(landmark_match,
                                                landmark_gazetteer,
                                                type_list)
@@ -731,7 +732,7 @@ locate_event_i <- function(text_i,
                   (matched_words_correct_spelling %in% landmark_match$matched_words_correct_spelling)))
     
     #### Add always keep
-    locations_in_tweet <- bind_rows(locations_in_tweet, locations_in_tweet_alw_keep)
+    locations_in_tweet <- bind_rows(locations_in_tweet, locations_in_tweet_alw_keep) %>% unique()
     landmark_gazetteer <- list(landmark_gazetteer, 
                                landmark_gazetteer_alw_keep) %>%
       purrr::discard(is.null) %>%
@@ -884,7 +885,7 @@ locate_event_i <- function(text_i,
     #### Spatially define
     if(!is.na(df_out$lat[1])){
       
-      df_out_sp <- df_out 
+      df_out_sp <- df_out %>% unique()
       coordinates(df_out_sp) <- ~lon+lat
       crs(df_out_sp) <- CRS(crs_distance)
       
