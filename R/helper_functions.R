@@ -677,7 +677,8 @@ extract_locations_after_words <- function(word_loc,
 
 remove_general_landmarks <- function(landmark_match,
                                      landmark_gazetteer,
-                                     road_match_sp){
+                                     road_match_sp,
+                                     type_list){
   
   # General landmarks are those with multiple names, are not close to each
   # other and there is no dominant cluster. These are more likely to have
@@ -690,6 +691,8 @@ remove_general_landmarks <- function(landmark_match,
   # there is a dominant cluster: the landmarks in the dominant cluster are
   # specific, while the ones not are general.
   
+  # Remove general landmarks EXCEPT from type list, then if still general, remove.
+  
   # Remove general landmarks from:
   # (1) Landmark matched list
   # (2) Gazeteer
@@ -697,6 +700,11 @@ remove_general_landmarks <- function(landmark_match,
   landmark_match_gs <- merge(landmark_match, landmark_gazetteer@data, 
                              by.x="matched_words_correct_spelling", by.y="name", 
                              all.x=T, all.y=F)
+  
+  type_vector <- type_list %>% unlist() %>% paste(collapse="|")
+  if(nchar(type_vector) >= 1){
+    print("a")
+  }
   
   # If there are general landmarks AND roads
   if(("general" %in% landmark_match_gs$general_specific) & !is.null(road_match_sp)){
@@ -1255,7 +1263,7 @@ determine_location_from_landmark <- function(df_out,
                                              roads_final,
                                              crs_distance){
   
-  df_out <- subset(df_out, select=c(matched_words_tweet_spelling, matched_words_correct_spelling)) %>% unique
+  df_out <- subset(df_out, select=c(matched_words_tweet_spelling, matched_words_correct_spelling, dist_closest_crash_word)) %>% unique
   df_out <- merge(df_out, landmark_gazetteer, by.x="matched_words_correct_spelling", by.y="name", all.x=T, all.y=F)
   
   df_out$how_determined_landmark <- how_determined_text

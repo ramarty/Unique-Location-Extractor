@@ -143,7 +143,7 @@ locate_event <- function(text,
   landmark_gazetteer$name <- landmark_gazetteer[[landmark_gazetteer.name_var]]
   landmark_gazetteer$type <- landmark_gazetteer[[landmark_gazetteer.type_var]]
   landmark_gazetteer$general_specific <- landmark_gazetteer[[landmark_gazetteer.gs_var]]
-
+  
   roads$name <- roads[[roads.name_var]]
   areas$name <- areas[[areas.name_var]]
   
@@ -228,7 +228,9 @@ locate_event <- function(text,
     str_replace_all("[[:punct:]]", "") %>%
     str_replace_all("\\bamp\\b", "and") %>%
     str_replace_all("via at.*", "") %>% # remove everything include and after 
-                                        # "via at", which comes at end
+    #                                     "via at", which comes at end
+    str_replace_all("https.*", "") %>% # remove everything include and after 
+    #                                   "https", which comes at end
     
     # Replace Accronmys
     # TODO: Make this a separate file csv file that gets used
@@ -283,35 +285,35 @@ locate_event <- function(text,
       bind_rows_sf()
   } else{
     out_all <- pbmclapply(text,
-                      locate_event_i,
-                      landmark_gazetteer            = landmark_gazetteer, 
-                      roads                          = roads, 
-                      areas                          = areas, 
-                      prepositions_list              = prepositions_list, 
-                      event_words                    = event_words, 
-                      junction_words                 = junction_words, 
-                      false_positive_phrases         = false_positive_phrases, 
-                      type_list                      = type_list, 
-                      clost_dist_thresh              = clost_dist_thresh,
-                      fuzzy_match                    = fuzzy_match,
-                      fuzzy_match.min_word_length    = fuzzy_match.min_word_length,
-                      fuzzy_match.dist               = fuzzy_match.dist,
-                      fuzzy_match.ngram_max          = fuzzy_match.ngram_max,
-                      fuzzy_match.first_letters_same = fuzzy_match.first_letters_same,
-                      fuzzy_match.last_letters_same  = fuzzy_match.last_letters_same,
-                      crs_distance                   = crs_distance,
-                      crs_out                        = crs_out,
-                      quiet                          = quiet,
-                      
-                      landmark_list = landmark_list,
-                      roads_list    = roads_list,
-                      areas_list    = areas_list,
-                      prepositions_all = prepositions_all,
-                      junction_words_regex = junction_words_regex,
-                      mc.cores = mc_cores) %>%
+                          locate_event_i,
+                          landmark_gazetteer            = landmark_gazetteer, 
+                          roads                          = roads, 
+                          areas                          = areas, 
+                          prepositions_list              = prepositions_list, 
+                          event_words                    = event_words, 
+                          junction_words                 = junction_words, 
+                          false_positive_phrases         = false_positive_phrases, 
+                          type_list                      = type_list, 
+                          clost_dist_thresh              = clost_dist_thresh,
+                          fuzzy_match                    = fuzzy_match,
+                          fuzzy_match.min_word_length    = fuzzy_match.min_word_length,
+                          fuzzy_match.dist               = fuzzy_match.dist,
+                          fuzzy_match.ngram_max          = fuzzy_match.ngram_max,
+                          fuzzy_match.first_letters_same = fuzzy_match.first_letters_same,
+                          fuzzy_match.last_letters_same  = fuzzy_match.last_letters_same,
+                          crs_distance                   = crs_distance,
+                          crs_out                        = crs_out,
+                          quiet                          = quiet,
+                          
+                          landmark_list = landmark_list,
+                          roads_list    = roads_list,
+                          areas_list    = areas_list,
+                          prepositions_all = prepositions_all,
+                          junction_words_regex = junction_words_regex,
+                          mc.cores = mc_cores) %>%
       bind_rows_sf()
   }
-
+  
   st_crs(out_all) <- crs_out
   
   return(out_all)
@@ -357,7 +359,7 @@ locate_event_i <- function(text_i,
   area_match <- phrase_in_sentence_exact(text_i, areas_list)
   
   #### Fuzzy
-  if(fuzzy_match == TRUE){
+  if(fuzzy_match %in% TRUE){
     landmark_match_fuzzy <- phrase_in_sentence_fuzzy(text_i, 
                                                      landmark_list,
                                                      fuzzy_match.min_word_length, 
@@ -389,15 +391,15 @@ locate_event_i <- function(text_i,
     # TODO: If landmark is two words long and both words spelled correctly,
     #       hunspell things incorrectly spelled?
     landmark_match_fuzzy <- landmark_match_fuzzy %>%
-      filter(!(str_count(matched_words_tweet_spelling, "\\S+") %in% 1)) %>%
+      #filter(!(str_count(matched_words_tweet_spelling, "\\S+") %in% 1)) %>% # tweet: tajmall; correct: taj mall
       filter(!hunspell_check(matched_words_tweet_spelling))
     
     road_match_fuzzy <- road_match_fuzzy %>%
-      filter(!(str_count(matched_words_tweet_spelling, "\\S+") %in% 1)) %>%
+      #filter(!(str_count(matched_words_tweet_spelling, "\\S+") %in% 1)) %>%
       filter(!hunspell_check(matched_words_tweet_spelling))
     
     area_match_fuzzy <- area_match_fuzzy %>%
-      filter(!(str_count(matched_words_tweet_spelling, "\\S+") %in% 1)) %>%
+      #filter(!(str_count(matched_words_tweet_spelling, "\\S+") %in% 1)) %>%
       filter(!hunspell_check(matched_words_tweet_spelling))
     
     #### Add fuzzy match to full match list
@@ -586,12 +588,37 @@ locate_event_i <- function(text_i,
     crash_word_locations <- lapply(event_words, phrase_locate, text_i) %>% bind_rows
     preposition_word_locations <- lapply(prepositions_all, phrase_locate, text_i) %>% bind_rows
     
+    #### Distance Closest Event Word
+    if(nrow(crash_word_locations) > 0){
+      
+      crash_word_locations_vec <- c(crash_word_locations$word_loc_min, crash_word_locations$word_loc_max) %>% as.vector() %>% unique()
+      
+      locations_in_tweet$dist_closest_crash_word <- lapply(1:nrow(locations_in_tweet), function(i){
+        locations_in_tweet_i <- locations_in_tweet[i,]
+        
+        word_loc_min_dist <- min(abs(locations_in_tweet_i$word_loc_min - crash_word_locations_vec))
+        word_loc_max_dist <- min(abs(locations_in_tweet_i$word_loc_max - crash_word_locations_vec))
+        
+        out <- min(c(word_loc_min_dist, word_loc_max_dist))
+        return(out)
+      }) %>%
+        unlist()
+      
+    }
+    
+    
+    
+    locations_in_tweet
+    dist_closest_crash_word
+    
     # ** 4.3 Restrict Locations/Landmarks to Consider --------------------------
     if(!quiet) print("Section - 4.3")
     ## Remove general landmarks
+    # type_list // except_if_type parameter
     rm_gen_out <- remove_general_landmarks(landmark_match,
                                            landmark_gazetteer,
-                                           road_match_sp)
+                                           road_match_sp,
+                                           type_list)
     landmark_match     <- rm_gen_out$landmark_match
     landmark_gazetteer <- rm_gen_out$landmark_gazetteer
     
@@ -695,7 +722,7 @@ locate_event_i <- function(text_i,
     if(!quiet) print("Section - 7.2")
     ## Null output
     
-
+    
     
     loc_searched <- FALSE
     
@@ -733,7 +760,7 @@ locate_event_i <- function(text_i,
             
             loc_searched <- TRUE
           }
-
+          
         }
       }
       
@@ -939,7 +966,7 @@ locate_event_i <- function(text_i,
       
     }
   }
-
+  
   
   df_out$text <- text_i
   if(!is.null(df_out$dist_closest_crash_word)) df_out$dist_closest_crash_word <- as.character(df_out$dist_closest_crash_word)
