@@ -56,6 +56,8 @@ locate_event <- function(text,
                          quiet = T,
                          mc_cores = 1){
   
+  print("Version 0.1")
+  
   # DESCRIPTION: Locate a unique event from text. 
   # ARGS
   # landmark_gazetteer: SpatialPointsDataframe or SpatialFeatures object with points.
