@@ -234,6 +234,18 @@ locate_event <- function(text,
     str_replace_all("https.*", "") %>% # remove everything include and after 
     #                                   "https", which comes at end
     
+    # Remove numbers at beginning
+    # Squish strings. Should be last thing done
+    str_squish() %>%
+    str_replace_all("^[:digit:]|^ [:digit:]", "") %>% 
+    str_replace_all("^[:digit:]|^ [:digit:]", "") %>% 
+    str_replace_all("^[:digit:]|^ [:digit:]", "") %>% 
+    str_squish() %>%
+    str_replace_all("^[:digit:]|^ [:digit:]", "") %>% 
+    str_replace_all("^[:digit:]|^ [:digit:]", "") %>% 
+    str_replace_all("^[:digit:]|^ [:digit:]", "") %>% 
+    str_replace_all("^[:digit:]|^ [:digit:]", "") %>% 
+    
     # Replace Accronmys
     # TODO: Make this a separate file csv file that gets used
     str_replace_all("\\bpri sch\\b", "primary school") %>%
@@ -634,7 +646,7 @@ locate_event_i <- function(text_i,
       
     }
     
-
+    
     # ** 4.3 Restrict Locations/Landmarks to Consider --------------------------
     if(!quiet) print("Section - 4.3")
     ## Subset
@@ -645,16 +657,24 @@ locate_event_i <- function(text_i,
       exact_fuzzy_startendsame()
     
     ## Keep, despite ignoring general and roads/areas restriction
-    vars_for_alws_keep <- names(locations_in_tweet)[grepl("crashword_prepos_tier_", names(locations_in_tweet))]
-    tokeep_01 <- locations_in_tweet[,vars_for_alws_keep] %>% rowSums() %>% as.vector()
-    locations_in_tweet_alw_keep <- locations_in_tweet[tokeep_01 %in% 1,]
-    if(nrow(locations_in_tweet_alw_keep) >= 1){
-      landmark_gazetteer_alw_keep <- landmark_gazetteer[landmark_gazetteer$name %in% locations_in_tweet_alw_keep$matched_words_correct_spelling,]
+    landmarks_in_tweet <- locations_in_tweet[locations_in_tweet$location_type %in% "landmark",]
+    if(nrow(landmarks_in_tweet) > 0){
+      vars_for_alws_keep <- names(landmarks_in_tweet)[grepl("crashword_prepos_tier_", names(landmarks_in_tweet))]
+      tokeep_01 <- landmarks_in_tweet[,vars_for_alws_keep] %>% rowSums() %>% as.vector()
+      locations_in_tweet_alw_keep <- landmarks_in_tweet[tokeep_01 %in% 1,]
+      if(nrow(locations_in_tweet_alw_keep) >= 1){
+        landmark_gazetteer_alw_keep <- landmark_gazetteer[landmark_gazetteer$name %in% locations_in_tweet_alw_keep$matched_words_correct_spelling,]
+      } else{
+        landmark_gazetteer_alw_keep <- NULL
+      }
     } else{
       landmark_gazetteer_alw_keep <- NULL
     }
+
     
     ## Remove general landmarks
+    landmark_match <- landmark_match[landmark_match$matched_words_correct_spelling %in% locations_in_tweet$matched_words_correct_spelling,]
+    
     # type_list // except_if_type parameter
     rm_gen_out <- remove_general_landmarks(landmark_match,
                                            landmark_gazetteer,
@@ -670,12 +690,12 @@ locate_event_i <- function(text_i,
                ((location_type %in% "landmark") & 
                   (matched_words_correct_spelling %in% landmark_match$matched_words_correct_spelling)))
     
-
+    
     # ** 4.4 Restrict by roads and neighborhood --------------------------------
     if(!quiet) print("Section - 4.4")
     
     landmark_match <- landmark_match[landmark_match$matched_words_correct_spelling %in% locations_in_tweet$matched_words_correct_spelling,]
-
+    
     ## Roads
     if(nrow(road_match) > 0 & nrow(landmark_match) > 0){
       land_road_restrict <- restrict_landmarks_by_location(landmark_match,
@@ -706,7 +726,7 @@ locate_event_i <- function(text_i,
                                landmark_gazetteer_alw_keep) %>%
       purrr::discard(is.null) %>%
       do.call(what = "rbind")
-
+    
     # 5. Find Intersections ----------------------------------------------------
     if(!quiet) print("Section - 5")
     road_intersections <- extract_intersections(locations_in_tweet, roads)
@@ -928,7 +948,7 @@ locate_event_i <- function(text_i,
         roads_final_sp <- merge(roads, roads_final, by.x="name", by.y="matched_words_correct_spelling", all.x=F)
         
         # Only use if none of road segments is ambiguous
-        if(!(TRUE %in% roads_final_sp$ambiguous_road)){
+        if(!(TRUE %in% roads_final_sp$ambiguous_road) & !loc_searched){
           
           # Use road if df_out is blank
           roads_final_sp$id <- 1

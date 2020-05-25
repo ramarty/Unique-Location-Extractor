@@ -991,7 +991,7 @@ search_crashword_other_prepos <- function(text,
                                           location_words, 
                                           crash_words, 
                                           prepositions,
-                                          N_other_words=2){
+                                          N_other_words=3){
   
   crash_words_regex  <- paste(paste0("\\b",crash_words,"\\b"),collapse="|")
   prepositions_regex <- paste(paste0("\\b",prepositions,"\\b"),collapse="|")
