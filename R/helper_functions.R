@@ -1263,7 +1263,7 @@ determine_location_from_landmark <- function(df_out,
                                              roads_final,
                                              crs_distance){
   
-  df_out <- subset(df_out, select=c(matched_words_tweet_spelling, matched_words_correct_spelling, dist_closest_crash_word)) %>% unique
+  #df_out <- subset(df_out, select=c(matched_words_tweet_spelling, matched_words_correct_spelling, dist_closest_crash_word)) %>% unique
   df_out <- merge(df_out, landmark_gazetteer, by.x="matched_words_correct_spelling", by.y="name", all.x=T, all.y=F)
   
   df_out$how_determined_landmark <- how_determined_text

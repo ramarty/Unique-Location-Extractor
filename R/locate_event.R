@@ -606,11 +606,6 @@ locate_event_i <- function(text_i,
       
     }
     
-    
-    
-    locations_in_tweet
-    dist_closest_crash_word
-    
     # ** 4.3 Restrict Locations/Landmarks to Consider --------------------------
     if(!quiet) print("Section - 4.3")
     ## Remove general landmarks
