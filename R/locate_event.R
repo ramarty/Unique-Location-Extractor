@@ -43,7 +43,7 @@ locate_event <- function(text,
                                          "overturn", "collision", "wreck"), 
                          junction_words = c("intersection", "junction"), 
                          false_positive_phrases = "", 
-                         type_list = "", # NOT IMPLEMENTED YET
+                         type_list = NULL, # NOT IMPLEMENTED YET
                          clost_dist_thresh = 500,
                          fuzzy_match = TRUE,
                          fuzzy_match.min_word_length = c(5,11),
@@ -670,12 +670,22 @@ locate_event_i <- function(text_i,
     } else{
       landmark_gazetteer_alw_keep <- NULL
     }
-
+    
+    landmark_match <- landmark_match[landmark_match$matched_words_correct_spelling %in% locations_in_tweet$matched_words_correct_spelling,]
+    
+    ## Restricts gazetteer by type
+    # Do before restrict by general, as here checks for, within
+    # a general landmark, is there specific within our type_list?
+    if(!is.null(type_list)){
+      landmark_gazetteer <- remove_gaz_by_type(landmark_match,
+                                               landmark_gazetteer,
+                                               type_list)
+    }
     
     ## Remove general landmarks
     landmark_match <- landmark_match[landmark_match$matched_words_correct_spelling %in% locations_in_tweet$matched_words_correct_spelling,]
     
-    # type_list // except_if_type parameter
+    
     rm_gen_out <- remove_general_landmarks(landmark_match,
                                            landmark_gazetteer,
                                            road_match_sp,
@@ -786,8 +796,6 @@ locate_event_i <- function(text_i,
     # ** 7.2 Landmark Decision Process --------------------------------------------
     if(!quiet) print("Section - 7.2")
     ## Null output
-    
-    
     
     loc_searched <- FALSE
     

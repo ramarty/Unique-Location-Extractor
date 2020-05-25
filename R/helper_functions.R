@@ -318,7 +318,7 @@ restrict_landmarks_by_location <- function(landmark_match,
   #                           by.y = "matched_words_correct_spelling",
   #                           all.x=F)
   landmark_match_sp <- landmark_gazetteer[landmark_gazetteer$name %in% 
-                                           landmark_match$matched_words_correct_spelling,]
+                                            landmark_match$matched_words_correct_spelling,]
   
   ## Spatiall prep sdf
   sdf$id <- 1
@@ -619,7 +619,7 @@ extract_locations_after_words <- function(word_loc,
     for(i in 1:10){
       word_i <- word(text, word_loc+i)
       if(is.na(word_i)) break
-
+      
       
       # If first word after preposition, the gazetteer word must start with that word.
       # Restrict words in gazetteer, creating a temporary dataframe
@@ -656,7 +656,7 @@ extract_locations_after_words <- function(word_loc,
                location_type = "landmark")
       
       ## Add tweet spelling
-     # max_word_length <- landmarks_subset$matched_words_correct_spelling %>% str_count("\\S+") %>% max()
+      # max_word_length <- landmarks_subset$matched_words_correct_spelling %>% str_count("\\S+") %>% max()
       
       landmarks_subset@data <- landmarks_subset@data %>%
         mutate(matched_words_tweet_spelling = word(text,
@@ -674,6 +674,45 @@ extract_locations_after_words <- function(word_loc,
 
 ##### ******************************************************************** #####
 # SUBSET LOCATIONS -------------------------------------------------------------
+
+remove_gaz_by_type <- function(landmark_match,
+                               landmark_gazetteer,
+                               type_list){
+  # For each landmark entry, grabs the entries in the gazetteer and restricts
+  # gazetteer entry by type. If nrow=0, then keep original gazetteer entries
+  # (no subsetting); if nrow>0, restrict to ones with type and checks if 
+  # new entry grouping should be considered general/specific
+  # Does not remove entries in their entirety!
+  # TODO: Inefficient... rbind with full gazetteer...
+  
+  type_regex <- type_list %>% unlist %>% as.vector() %>% paste(collapse = "|")
+  
+  # For each name, restrict to types. If nrow=0, use original; if nrow>0, 
+  # re-check dominan cluster and use that for gaz entry
+  gaz_to_add <- lapply(unique(landmark_match$matched_words_correct_spelling), function(name){
+    gaz_i <- landmark_gazetteer[landmark_gazetteer$name %in% name,]
+    gaz_type_i <- gaz_i[grepl(type_regex, gaz_i$type),]
+    
+    if(nrow(gaz_type_i) > 0){
+
+      gaz_i <- extract_dominant_cluster(gaz_type_i,
+                                        return_general_landmarks = "all")
+    } 
+    
+    return(gaz_i)
+  }) %>%
+    do.call(what = "rbind")
+  
+  ### Replace entries
+  # Remove exisitng
+  landmark_gazetteer_rm <- landmark_gazetteer[!(landmark_gazetteer$name %in% landmark_match$matched_words_correct_spelling),]
+  
+  # Add new
+  landmark_gazetteer <- list(landmark_gazetteer, gaz_to_add) %>% do.call(what = "rbind")
+  
+  return(landmark_gazetteer)
+}
+
 
 remove_general_landmarks <- function(landmark_match,
                                      landmark_gazetteer,
@@ -701,10 +740,10 @@ remove_general_landmarks <- function(landmark_match,
                              by.x="matched_words_correct_spelling", by.y="name", 
                              all.x=T, all.y=F)
   
-  type_vector <- type_list %>% unlist() %>% paste(collapse="|")
-  if(nchar(type_vector) >= 1){
-    print("a")
-  }
+  #type_vector <- type_list %>% unlist() %>% paste(collapse="|")
+  #if(nchar(type_vector) >= 1){
+  #  print("a")
+  #}
   
   # If there are general landmarks AND roads
   if(("general" %in% landmark_match_gs$general_specific) & !is.null(road_match_sp)){
