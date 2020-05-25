@@ -143,7 +143,7 @@ locate_event <- function(text,
   landmark_gazetteer$name <- landmark_gazetteer[[landmark_gazetteer.name_var]]
   landmark_gazetteer$type <- landmark_gazetteer[[landmark_gazetteer.type_var]]
   landmark_gazetteer$general_specific <- landmark_gazetteer[[landmark_gazetteer.gs_var]]
-  
+
   roads$name <- roads[[roads.name_var]]
   areas$name <- areas[[areas.name_var]]
   
@@ -164,6 +164,9 @@ locate_event <- function(text,
     crs(landmark_gazetteer_spdf) <- CRS(as.character(landmark_gazetteer@proj4string))
     landmark_gazetteer <- landmark_gazetteer_spdf
   }
+  
+  # Before subsetting
+  landmark_gazetteer_orig <- landmark_gazetteer
   
   #### Project Data
   landmark_gazetteer <- spTransform(landmark_gazetteer, CRS(crs_distance))
@@ -893,30 +896,51 @@ locate_event_i <- function(text_i,
       
     }
     
-    # 8. Add Variables to Output -----------------------------------------------
-    if(!quiet) print("Section - 8")
+  }
+  
+  # 8. Add Variables to Output -----------------------------------------------
+  if(!quiet) print("Section - 8")
+  
+  # 1. Add all location types found
+  # 2. Add tweet
+  if("landmark" %in% locations_in_tweet_original$location_type){
+    df_out$landmarks_all_tweet_spelling <- locations_in_tweet_original$matched_words_tweet_spelling[locations_in_tweet_original$location_type %in% "landmark"] %>% unique %>% paste(collapse=";")
+    df_out$landmarks_all_correct_spelling <- locations_in_tweet_original$matched_words_correct_spelling[locations_in_tweet_original$location_type %in% "landmark"] %>% unique %>% paste(collapse=";")
     
-    # 1. Add all location types found
-    # 2. Add tweet
-    if("landmark" %in% locations_in_tweet_original$location_type){
-      df_out$landmarks_all_tweet_spelling <- locations_in_tweet_original$matched_words_tweet_spelling[locations_in_tweet_original$location_type %in% "landmark"] %>% unique %>% paste(collapse=",")
-      df_out$landmarks_all_correct_spelling <- locations_in_tweet_original$matched_words_correct_spelling[locations_in_tweet_original$location_type %in% "landmark"] %>% unique %>% paste(collapse=",")
-    }
+    df_out$landmarks_all_location <- landmark_gazetteer_orig[landmark_gazetteer_orig$name %in% locations_in_tweet_original$matched_words_tweet_spelling[locations_in_tweet_original$location_type %in% "landmark"],] %>%
+      as.data.frame() %>%
+      mutate(location = paste0(name,",",lat,",",lon)) %>%
+      pull(location) %>%
+      unique %>%
+      paste(collapse=";")
+  }
+  
+  if("road" %in% locations_in_tweet_original$location_type){
+    df_out$roads_all_tweet_spelling <- locations_in_tweet_original$matched_words_tweet_spelling[locations_in_tweet_original$location_type %in% "road"] %>% unique %>% paste(collapse=";")
+    df_out$roads_all_correct_spelling <- locations_in_tweet_original$matched_words_correct_spelling[locations_in_tweet_original$location_type %in% "road"] %>% unique %>% paste(collapse=";")
+  }
+  
+  if("neighborhood" %in% locations_in_tweet_original$location_type){
+    df_out$neighborhoods_all_tweet_spelling <- locations_in_tweet_original$matched_words_tweet_spelling[locations_in_tweet_original$location_type %in% "neighborhood"] %>% unique %>% paste(collapse=";")
+    df_out$neighborhoods_all_correct_spelling <- locations_in_tweet_original$matched_words_correct_spelling[locations_in_tweet_original$location_type %in% "neighborhood"] %>% unique %>% paste(collapse=";")
+  }
+  
+  if(nrow(road_intersections) >= 1){
     
-    if("road" %in% locations_in_tweet_original$location_type){
-      df_out$roads_all_tweet_spelling <- locations_in_tweet_original$matched_words_tweet_spelling[locations_in_tweet_original$location_type %in% "road"] %>% unique %>% paste(collapse=",")
-      df_out$roads_all_correct_spelling <- locations_in_tweet_original$matched_words_correct_spelling[locations_in_tweet_original$location_type %in% "road"] %>% unique %>% paste(collapse=",")
-    }
+    rd_inter_df <- spTransform(road_intersections, CRS(crs_out)) %>%
+      as.data.frame() %>%
+      mutate(intersection_all_tweet_spelling = paste0(road_tweet_spelling_1,",", road_tweet_spelling_2),
+             intersection_all_correct_spelling = paste0(road_correct_spelling_1,",", road_correct_spelling_2),
+             intersection_all_location = paste0(intersection_all_correct_spelling, ",",lat,",",lon))
     
-    if("neighborhood" %in% locations_in_tweet_original$location_type){
-      df_out$neighborhoods_all_tweet_spelling <- locations_in_tweet_original$matched_words_tweet_spelling[locations_in_tweet_original$location_type %in% "neighborhood"] %>% unique %>% paste(collapse=",")
-      df_out$neighborhoods_all_correct_spelling <- locations_in_tweet_original$matched_words_correct_spelling[locations_in_tweet_original$location_type %in% "neighborhood"] %>% unique %>% paste(collapse=",")
-    }
-    
-    df_out$text <- text_i
-    if(!is.null(df_out$dist_closest_crash_word)) df_out$dist_closest_crash_word <- as.character(df_out$dist_closest_crash_word)
+    df_out$intersection_all_tweet_spelling <- rd_inter_df$intersection_all_tweet_spelling %>% unique %>% paste(collapse=";")
+    df_out$intersection_all_correct_spelling <- rd_inter_df$intersection_all_correct_spelling %>% unique %>% paste(collapse=";")
+    df_out$intersection_all_location <- rd_inter_df$intersection_all_location %>% unique %>% paste(collapse=";")
     
   }
+  
+  df_out$text <- text_i
+  if(!is.null(df_out$dist_closest_crash_word)) df_out$dist_closest_crash_word <- as.character(df_out$dist_closest_crash_word)
   
   # 9. Clean Spatial Output ----------------------------------------------------
   if(!quiet) print("Section - 9")
