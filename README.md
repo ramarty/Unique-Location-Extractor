@@ -59,15 +59,6 @@ leaflet() %>%
              opacity = 1,
              weight=10,
              color = "red")
-
-
-#### Check locations of garden city in raw gazetteer
-leaflet() %>%
-  addTiles() %>%
-  addCircles(data=landmarks[grepl("garden city", landmarks$name),],
-             color="red",
-             label = ~name)
-
 ```
 
 ## augment_gazetteer
