@@ -925,19 +925,22 @@ locate_event_i <- function(text_i,
     df_out$neighborhoods_all_correct_spelling <- locations_in_tweet_original$matched_words_correct_spelling[locations_in_tweet_original$location_type %in% "neighborhood"] %>% unique %>% paste(collapse=";")
   }
   
-  if(nrow(road_intersections) >= 1){
-    
-    rd_inter_df <- spTransform(road_intersections, CRS(crs_out)) %>%
-      as.data.frame() %>%
-      mutate(intersection_all_tweet_spelling = paste0(road_tweet_spelling_1,",", road_tweet_spelling_2),
-             intersection_all_correct_spelling = paste0(road_correct_spelling_1,",", road_correct_spelling_2),
-             intersection_all_location = paste0(intersection_all_correct_spelling, ",",lat,",",lon))
-    
-    df_out$intersection_all_tweet_spelling <- rd_inter_df$intersection_all_tweet_spelling %>% unique %>% paste(collapse=";")
-    df_out$intersection_all_correct_spelling <- rd_inter_df$intersection_all_correct_spelling %>% unique %>% paste(collapse=";")
-    df_out$intersection_all_location <- rd_inter_df$intersection_all_location %>% unique %>% paste(collapse=";")
-    
+  if(exists("road_intersections")){
+    if(nrow(road_intersections) >= 1){
+      
+      rd_inter_df <- spTransform(road_intersections, CRS(crs_out)) %>%
+        as.data.frame() %>%
+        mutate(intersection_all_tweet_spelling = paste0(road_tweet_spelling_1,",", road_tweet_spelling_2),
+               intersection_all_correct_spelling = paste0(road_correct_spelling_1,",", road_correct_spelling_2),
+               intersection_all_location = paste0(intersection_all_correct_spelling, ",",lat,",",lon))
+      
+      df_out$intersection_all_tweet_spelling <- rd_inter_df$intersection_all_tweet_spelling %>% unique %>% paste(collapse=";")
+      df_out$intersection_all_correct_spelling <- rd_inter_df$intersection_all_correct_spelling %>% unique %>% paste(collapse=";")
+      df_out$intersection_all_location <- rd_inter_df$intersection_all_location %>% unique %>% paste(collapse=";")
+      
+    }
   }
+
   
   df_out$text <- text_i
   if(!is.null(df_out$dist_closest_crash_word)) df_out$dist_closest_crash_word <- as.character(df_out$dist_closest_crash_word)
