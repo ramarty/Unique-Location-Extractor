@@ -569,6 +569,11 @@ locate_event_i <- function(text_i,
     # areas.
     locations_in_tweet <- locations_in_tweet[!(locations_in_tweet$location_type %in% "area"),]
     
+    #roads <<- roads
+    #locations_in_tweet <<- locations_in_tweet
+    #areas <<- areas
+    #road_match <<- road_match
+    
     ## Road shapefile
     if(nrow(road_match) > 0){
       road_match_sp <- roads[roads$name %in% road_match$matched_words_correct_spelling,]
