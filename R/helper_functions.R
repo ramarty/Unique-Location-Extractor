@@ -313,10 +313,12 @@ restrict_landmarks_by_location <- function(landmark_match,
   # Subset landmark locations by other locations (eg, roads / areas)
   
   ## Spatiall set landmarks
-  landmark_match_sp <- merge(landmark_gazetteer, landmark_match,
-                             by.x = "name",
-                             by.y = "matched_words_correct_spelling",
-                             all.x=F)
+  #landmark_match_sp <- merge(landmark_gazetteer, landmark_match,
+  #                           by.x = "name",
+  #                           by.y = "matched_words_correct_spelling",
+  #                           all.x=F)
+  landmark_match_sp <- landmark_gazetteer[landmark_gazetteer$name %in% 
+                                           landmark_match$matched_words_correct_spelling,]
   
   ## Spatiall prep sdf
   sdf$id <- 1
