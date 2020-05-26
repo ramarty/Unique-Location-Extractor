@@ -7,13 +7,13 @@ Text often contains references to the locations of events where we want to extra
 
 The tweet contains three location references: (1) garden city, (2) thika road and (3) roysambu, where 'garden city' is the name of multiple locations that are over 20 kilometers apart. Here, we are interested in extracting the location of the garden city location on thika road that represents the crash site.
 
-The Unique Location Extractor (ULEx) geoparses text to extract the unique location of events. The algorithm takes advantage of contextual information contained within text (references to roads or administrate areas, such as neighborhoods) and determines which location references should be ignored in order to determine the unique location of events.
+The Unique Location Extractor (ULEx) geoparses text to extract the unique location of events. The algorithm takes advantage of contextual information contained within text (references to roads or administrate areas, such as neighborhoods) and determines which location references do not reference the event of interest and should be ignored.
 
 This package was originally developed to extract locations of road traffic crashes from reports of crashes via Twitter, specifically in the context of Nairobi, Kenya using the Twitter feed [@Ma3Route](https://twitter.com/Ma3Route?ref_src=twsrc%5Egoogle%7Ctwcamp%5Eserp%7Ctwgr%5Eauthor).
 
 ## Installation
 
-Until the package is made available via devtools (coming soon!), the functions can be loaded by running the following script
+ULEx is an an R package. Until the package is made available via devtools (coming soon!), the functions can be loaded by running the following script
 
 ``` r
 source("https://raw.githubusercontent.com/ramarty/Unique-Location-Extractor/master/R/load_ulex.R")
@@ -21,7 +21,11 @@ source("https://raw.githubusercontent.com/ramarty/Unique-Location-Extractor/mast
 
 ## Main functions
 
-The package contains two main functions: `augment_gazetteer` and `locate_event`. The backbone of locating events is looking up location references in a gazetteer, or a geographic dictionary. The `augment_gazetteer` facilitates cleaning a gazetteer that may have been constructed from sources such as [Open Street Maps](https://cran.r-project.org/web/packages/osmdata/vignettes/osmdata.html), [Geonames](https://github.com/ropensci/geonames) or [Google Maps](https://www.rdocumentation.org/packages/googleway/versions/2.7.1/topics/google_places). It is specifically designed to clean a dictionary of point locations/landmarks. The `locate_event` function then uses the gazetteer. `locate_event` takes text as input and returns the location of the relevant event.
+The package contains two main functions:
+
+* __augment_gazetteer:__ The backbone of locating events is looking up location references in a gazetteer, or geographic dictionary. The `augment_gazetteer` facilitates cleaning a gazetteer that may have been constructed from sources such as [Open Street Maps](https://cran.r-project.org/web/packages/osmdata/vignettes/osmdata.html), [Geonames](https://github.com/ropensci/geonames) or [Google Maps](https://www.rdocumentation.org/packages/googleway/versions/2.7.1/topics/google_places).
+
+* __locate_event:__ takes text as input and returns the location of the relevant event. Key inputs include a gazetteer of landmarks, spatial files of roads and areas (e.g., neighborhoods) and a list of event words.
 
 ## Example
 
@@ -49,6 +53,7 @@ crash_locs <- locate_event(text = tweets,
                            landmark_gazetteer = landmarks_aug,
                            areas = neighborhoods,
                            roads = roads,
+                           event_words = c("accident", "crash", "collision", "wreck", "overturn"),
                            crs_distance = "+init=epsg:21037")
 
 #### Display output
