@@ -39,6 +39,7 @@ locate_event <- function(text,
                                                   c("near", "after", "toward",
                                                     "along", "towards", "approach"),
                                                   c("past","from","on")), 
+                         prep_check_order = "prep_then_pattern",
                          event_words = c("accidents", "accident", "crash", 
                                          "overturn", "collision", "wreck"), 
                          junction_words = c("intersection", "junction"), 
@@ -56,7 +57,7 @@ locate_event <- function(text,
                          quiet = T,
                          mc_cores = 1){
   
-  print("Version 0.1")
+  print("Version 0.2")
   
   # DESCRIPTION: Locate a unique event from text. 
   # ARGS
@@ -276,6 +277,7 @@ locate_event <- function(text,
                       roads                          = roads, 
                       areas                          = areas, 
                       prepositions_list              = prepositions_list, 
+                      prep_check_order               = prep_check_order,
                       event_words                    = event_words, 
                       junction_words                 = junction_words, 
                       false_positive_phrases         = false_positive_phrases, 
@@ -304,6 +306,7 @@ locate_event <- function(text,
                           roads                          = roads, 
                           areas                          = areas, 
                           prepositions_list              = prepositions_list, 
+                          prep_check_order               = prep_check_order,
                           event_words                    = event_words, 
                           junction_words                 = junction_words, 
                           false_positive_phrases         = false_positive_phrases, 
@@ -338,6 +341,7 @@ locate_event_i <- function(text_i,
                            roads,
                            areas,
                            prepositions_list,
+                           prep_check_order,
                            event_words,
                            junction_words,
                            false_positive_phrases,
@@ -677,6 +681,11 @@ locate_event_i <- function(text_i,
     ## Restricts gazetteer by type
     # Do before restrict by general, as here checks for, within
     # a general landmark, is there specific within our type_list?
+    #landmark_match <<- landmark_match
+    #landmark_gazetteer <<- landmark_gazetteer
+    #type_list <<- type_list
+    #print("aa")
+    #stop()
     if(!is.null(type_list) & nrow(landmark_match) > 0){
       landmark_gazetteer <- remove_gaz_by_type(landmark_match,
                                                landmark_gazetteer,
@@ -806,37 +815,66 @@ locate_event_i <- function(text_i,
       
       # **** 7.2.1 Preposition Search: Landmark then Intersection ---------------------
       if(!quiet) print("Section - 7.2.1")
-      for(prep_i in 1:length(prepositions_list)){
+      
+      ## Determine order: prep_i then prep_pattern or vice versa?
+      prep_check_order_vec <- c()
+      
+      if(prep_check_order %in% "prep_then_pattern"){
+        
+        for(prep_i in 1:length(prepositions_list)){
+          for(prep_pattern in c("crashword_prepos_tier_",
+                                "crashword_other_prepos_tier_",
+                                "prepos_before_crashword_tier_")){
+            
+            prep_check_order_vec <- c(prep_check_order_vec,
+                                  paste0(prep_pattern, prep_i))
+            
+          }
+        }
+        
+      } else{
+        
         for(prep_pattern in c("crashword_prepos_tier_",
                               "crashword_other_prepos_tier_",
                               "prepos_before_crashword_tier_")){
-          
-          # 1. [crashword] [preposition] [location]
-          if(TRUE %in% landmarks_final[[paste0(prep_pattern, prep_i)]] & !loc_searched){
+          for(prep_i in 1:length(prepositions_list)){
             
-            df_out <- determine_location_from_landmark(
-              landmarks_final[landmarks_final[[paste0(prep_pattern, prep_i)]] %in% TRUE,],
-              paste0("crashword_tier_",prep_i,"_",prep_pattern,"preposition_landmark"),
-              landmark_gazetteer,
-              roads,
-              roads_final,
-              crs_distance)
+            prep_check_order_vec <- c(prep_check_order_vec,
+                                  paste0(prep_pattern, prep_i))
             
-            loc_searched <- TRUE
           }
-          
-          ## 2. Do regardless of whether intersection word?
-          if(TRUE %in% road_intersections_final[[paste0(prep_pattern, prep_i)]] & !loc_searched){
-            
-            df_out <- determine_location_from_intersection(
-              road_intersections_final[road_intersections_final[[paste0(prep_pattern, prep_i)]] %in% TRUE,],
-              paste0("crashword_tier_",prep_i,"_preposition_intersection"))
-            
-            loc_searched <- TRUE
-          }
-          
         }
+        
       }
+      
+      for(prep_pattern_i in prep_check_order_vec){
+        
+        # 1. [crashword] [preposition] [location]
+        if(TRUE %in% landmarks_final[[prep_pattern_i]] & !loc_searched){
+          
+          df_out <- determine_location_from_landmark(
+            landmarks_final[landmarks_final[[prep_pattern_i]] %in% TRUE,],
+            paste0("crashword_tier_",prep_pattern_i,"preposition_landmark"),
+            landmark_gazetteer,
+            roads,
+            roads_final,
+            crs_distance)
+          
+          loc_searched <- TRUE
+        }
+        
+        ## 2. Do regardless of whether intersection word?
+        if(TRUE %in% road_intersections_final[[paste0(prep_pattern, prep_i)]] & !loc_searched){
+          
+          df_out <- determine_location_from_intersection(
+            road_intersections_final[road_intersections_final[[paste0(prep_pattern, prep_i)]] %in% TRUE,],
+            paste0("crashword_tier_",prep_i,"_preposition_intersection"))
+          
+          loc_searched <- TRUE
+        }
+        
+      }
+      
       
     }
     

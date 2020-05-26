@@ -268,6 +268,15 @@ extract_dominant_cluster <- function(sdf,
       
     }
     
+  # If above threshold  
+  } else{
+    
+    if(return_general_landmarks %in% c("only_if_all_general", "all")){
+      sdf_out <- sdf
+      sdf_out$general_specific <- "general"
+    }
+    
+    
   }
   
   ## Whether to collapse coordinates
