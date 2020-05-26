@@ -378,6 +378,8 @@ locate_event_i <- function(text_i,
   
   #### Fuzzy
   if(fuzzy_match %in% TRUE){
+    words_to_remove_fuzzy <- c(prepositions_all, event_words, junction_words) %>% unlist()
+    print(words_to_remove_fuzzy)
     landmark_match_fuzzy <- phrase_in_sentence_fuzzy(text_i, 
                                                      landmark_list,
                                                      fuzzy_match.min_word_length, 
@@ -385,7 +387,7 @@ locate_event_i <- function(text_i,
                                                      fuzzy_match.ngram_max,
                                                      fuzzy_match.first_letters_same,
                                                      fuzzy_match.last_letters_same,
-                                                     c(prepositions_all, event_words, junction_words)) 
+                                                     words_to_remove_fuzzy) 
     road_match_fuzzy <- phrase_in_sentence_fuzzy(text_i, 
                                                  roads_list,
                                                  fuzzy_match.min_word_length, 
@@ -393,7 +395,7 @@ locate_event_i <- function(text_i,
                                                  fuzzy_match.ngram_max,
                                                  fuzzy_match.first_letters_same,
                                                  fuzzy_match.last_letters_same,
-                                                 c(prepositions_all, event_words, junction_words)) 
+                                                 words_to_remove_fuzzy) 
     area_match_fuzzy <- phrase_in_sentence_fuzzy(text_i, 
                                                  areas_list,
                                                  fuzzy_match.min_word_length, 
@@ -401,7 +403,7 @@ locate_event_i <- function(text_i,
                                                  fuzzy_match.ngram_max,
                                                  fuzzy_match.first_letters_same,
                                                  fuzzy_match.last_letters_same,
-                                                 c(prepositions_all, event_words, junction_words)) 
+                                                 words_to_remove_fuzzy) 
     
     #### Remove fuzzy match if:
     # (1) Tweet spelling is one word
