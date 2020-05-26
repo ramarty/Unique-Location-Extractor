@@ -66,9 +66,9 @@ leaflet() %>%
              color = "red")
 ```
 
-## augment_gazetteer
+# augment_gazetteer
 
-### Description
+## Description
 
 The `augment_gazetteer` function adds additional landmarks to account for different ways of saying the same landmark name. For example, raw gazetteers may contain long, formal names, where shorter versions of the name are more often used. In addition, the function facilitates removing landmarks names that are spurious or may confuse the algorithm; these include landmark names that are common words that may be used in different contexts, or frequent and generic landmarks such as `hotel`. Key components of the function include:
 
@@ -77,7 +77,7 @@ The `augment_gazetteer` function adds additional landmarks to account for differ
 3. Removes landmarks that refer to large geographic areas (e.g., roads). Roads and areas are dealt with separately; this function focuses on cleaning a gazetteer of specific points/landmarks.
 4. Determines whether a landmark should be categorized as `specific` or `general`. Specific landmarks are those where the name uniquely identifies a location. General landmarks are those where the names do no uniquely identify a location; however, a general landmark with contextual information such as a road can uniquely determine a location. Note that when multiple landmarks have the same name, but >90% of the landmarks are very closely clustered together, the landmarks in the cluster are designated as `specific` while the other 10% are designated as `general`. The `locate_event` function only considers general landmarks when contextual information (roads or areas) are also referenced in the text.
 
-### Parameters
+## Parameters
 
 _Landmark Gazetteer_
 
@@ -142,9 +142,9 @@ _Other_
 * __crs_out:__  Coordinate reference system for output. (default: "+init=epsg:4326")
 * __quiet:__  Show algorithm progress (default: FALSE)
 
-## locate_event
+# locate_event
 
-### Description
+## Description
 
 The `locate_event` function extracts landmarks from text and determines the unique location of events from the text.
 
@@ -164,7 +164,7 @@ After extracting landmarks, the algorithm chooses the correct landmark using a s
 5. If the location name has multiple locations, we (1) restrict to locations near any mentioned road or area, (2) check for a dominant cluster of locations and (3) prioritize certain landmark types over others (e.g., a user is more likely to reference a large, well known location type like a stadium).
 6. If a landmark is not found, but a road or area are found, the road or area are returned. If a road and area are mentioned, the intersection of the road and area is returned.
 
-### Parameters
+## Parameters
 
 * __landmark_gazetteer:__ SpatialPointsDataframe or SpatialFeatures object with points.
 * __landmark_gazetteer.name_var:__ Name of variable indicating name of landmark
