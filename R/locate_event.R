@@ -385,7 +385,7 @@ locate_event_i <- function(text_i,
                                                      fuzzy_match.ngram_max,
                                                      fuzzy_match.first_letters_same,
                                                      fuzzy_match.last_letters_same,
-                                                     remove_words = c(prepositions_all, event_words, junction_words)) 
+                                                     c(prepositions_all, event_words, junction_words)) 
     road_match_fuzzy <- phrase_in_sentence_fuzzy(text_i, 
                                                  roads_list,
                                                  fuzzy_match.min_word_length, 
