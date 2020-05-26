@@ -25,7 +25,7 @@ The package contains two main functions:
 
 * __augment_gazetteer:__ The backbone of locating events is looking up location references in a gazetteer, or geographic dictionary. The `augment_gazetteer` facilitates cleaning a gazetteer that may have been constructed from sources such as [Open Street Maps](https://cran.r-project.org/web/packages/osmdata/vignettes/osmdata.html), [Geonames](https://github.com/ropensci/geonames) or [Google Maps](https://www.rdocumentation.org/packages/googleway/versions/2.7.1/topics/google_places).
 
-* __locate_event:__ takes text as input and returns the location of the relevant event. Key inputs include a gazetteer of landmarks, spatial files of roads and areas (e.g., neighborhoods) and a list of event words.
+* __locate_event:__ takes text as input and returns the location of the relevant event. Key inputs include the text to geoparse, a gazetteer of landmarks, spatial files of roads and areas (e.g., neighborhoods) and a list of event words.
 
 ## Example
 
