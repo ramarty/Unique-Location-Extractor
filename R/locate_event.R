@@ -661,6 +661,9 @@ locate_event_i <- function(text_i,
       phase_overlap() %>%
       exact_fuzzy_startendsame()
     
+    locations_in_tweet_original <- locations_in_tweet
+    # TODO: same line is above, but think makes more sense to grab "origina" locations here.
+    
     ## Keep, despite ignoring general and roads/areas restriction
     landmarks_in_tweet <- locations_in_tweet[locations_in_tweet$location_type %in% "landmark",]
     if(nrow(landmarks_in_tweet) > 0){
