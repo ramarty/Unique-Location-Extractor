@@ -130,6 +130,8 @@ augment_gazetteer <- function(landmarks,
   #### Prep spatial
   landmarks <- spTransform(landmarks, CRS(crs_distance))
   
+  landmarks <- landmarks[1:5000,]
+  
   # 3. Initial Parallel Landmarks ----------------------------------------------
   # These are parallel landmarks that should be added before any cleaning is 
   # done. For example, these rely on symbols to break up the landmark
@@ -166,8 +168,6 @@ augment_gazetteer <- function(landmarks,
         str_replace_all("[^[:alnum:]| ]", "") %>% 
         str_replace_all("\\|","") %>%
         str_squish 
-      
-      par_landmarks.slash$general_specific <- NA
       
       # We don't add to landmarks yet. We added to list of parallel landmarks
       # and use decision making rules from parallel as to whether we add.
