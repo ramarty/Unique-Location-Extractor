@@ -139,7 +139,10 @@ augment_gazetteer <- function(landmarks,
   
   if(parallel.sep_slash){
     
-    landmarks_slash <- landmarks[grepl("/", landmarks$name),]
+    # Split at slash, open parenthese, dash, and comma. / ( - ,
+    breaks <- c("/", "\\(", "-", ",") %>% paste(collapse = "|")
+    
+    landmarks_slash <- landmarks[grepl(breaks, landmarks$name),]
     
     # Separate landmarks with slashes into multiple slashes. Handles cases with 
     # multiple slashes. For example if: a/b/c, makes three landmarks: a, b and c
@@ -150,7 +153,7 @@ augment_gazetteer <- function(landmarks,
           if((landmark_i %% 100) == 0) print(paste0(landmark_i, " / ", nrow(landmarks_slash)))
         } 
         landmarks_slash_i <- landmarks_slash[landmark_i,]
-        alt_names <- strsplit(landmarks_slash_i$name, "/")[[1]]
+        alt_names <- strsplit(landmarks_slash_i$name, breaks)[[1]]
         df_spread <- lapply(1:length(alt_names), function(i) landmarks_slash_i) %>% do.call(what = "rbind")
         df_spread$name <- alt_names
         return(df_spread)  
@@ -167,12 +170,27 @@ augment_gazetteer <- function(landmarks,
       par_landmarks.slash$general_specific <- NA
       
       # We don't add to landmarks yet. We added to list of parallel landmarks
-      # and use decision making rules from parallel as to whether we add. 
-    } else{
-      par_landmarks.slash <- NULL
+      # and use decision making rules from parallel as to whether we add.
+      
+      ### ADD THEM NOW, SO IMPELMENT N/SKIP AND PARALLEL LANDMARKS TO THESE
+      
+      ## Remove if short
+      par_landmarks.slash <- par_landmarks.slash[nchar(par_landmarks.slash$name) >= 3,]
+      
+      ## Remove if name exists
+      if(parallel.add_only_if_name_new){
+        par_landmarks.slash <- par_landmarks.slash[!(par_landmarks.slash$name %in% landmarks$name),]
+      }
+      
+      ## Add
+      if(nrow(par_landmarks.slash) > 0){
+        landmarks <- list(landmarks, 
+                          par_landmarks.slash) %>%
+          do.call(what = "rbind")
+      }
+      
     } 
     
-    par_landmarks.slash <- NULL
   }
   
   # 3. Text Cleaning -----------------------------------------------------------
@@ -329,11 +347,11 @@ augment_gazetteer <- function(landmarks,
     # TODO: Speed gains if do in chunks, as large spdf slowing things down.
     # so chunks by name.
     landmarks_grams_all <- extract_dominant_cluster_all(landmarks_grams,
-                                 collapse_specific_coords = F,
-                                 return_general_landmarks = "none",
-                                 quiet = F)
+                                                        collapse_specific_coords = F,
+                                                        return_general_landmarks = "none",
+                                                        quiet = F)
     landmarks_grams_all$general_specific <- NA
-
+    
   } else{
     landmarks_grams_all <- landmarks_grams
     landmarks_grams_all$general_specific <- NA
@@ -554,8 +572,7 @@ augment_gazetteer <- function(landmarks,
                                 par_landmarks.word_diff_iftype, 
                                 par_landmarks.rm_begin_iftype, 
                                 par_landmarks.rm_end_iftype, 
-                                par_landmarks.word_diff_iftype,
-                                par_landmarks.slash) %>%
+                                par_landmarks.word_diff_iftype) %>%
     purrr::discard(is.null) %>% 
     do.call(what = "rbind")
   
@@ -568,16 +585,14 @@ augment_gazetteer <- function(landmarks,
   }
   
   #### Remove if general
-
-  
   if(parallel.add_only_if_specific){
     if(!quiet) print("Parallel Landmarks: General Specific Check")
     
     par_landmarks_newname <- extract_dominant_cluster_all(par_landmarks_newname,
-                                                        collapse_specific_coords = F,
-                                                        return_general_landmarks = "none",
-                                                        quiet = F)
-
+                                                          collapse_specific_coords = F,
+                                                          return_general_landmarks = "none",
+                                                          quiet = F)
+    
   }
   
   #### Parallel landmarks: New Type
