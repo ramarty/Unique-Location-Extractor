@@ -862,6 +862,7 @@ locate_event_i <- function(text_i,
             landmark_gazetteer,
             roads,
             roads_final,
+            type_list,
             crs_distance)
           
           loc_searched <- TRUE
@@ -915,6 +916,7 @@ locate_event_i <- function(text_i,
         landmark_gazetteer,
         roads,
         roads_final,
+        type_list,
         crs_distance)
       
       loc_searched <- TRUE

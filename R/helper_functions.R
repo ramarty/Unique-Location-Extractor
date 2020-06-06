@@ -1146,6 +1146,7 @@ choose_between_multiple_landmarks <- function(df_out,
 choose_between_landmark_same_name <- function(df_out,
                                               roads,
                                               roads_final,
+                                              type_list,
                                               crs_distance){
   #### Function for strategy of dealing with landmarks with same name, diff loc
   
@@ -1175,17 +1176,31 @@ choose_between_landmark_same_name <- function(df_out,
   
   # TODO --- If lower tier preposition, restrict to ones close to those !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   
+  # 2. If multiple landmarks with same name, restricy by type
+  if(length(type_list) > 0){
+    
+    for(type_tier_i in type_list){
+      type_tier_i <- type_tier_i %>% paste(collapse="|")
+      
+      if(TRUE %in% grepl(type_tier_i, df_out$type)){
+        df_out <- df_out[grepl(type_tier_i, df_out$type),]
+        df_out$how_determined_landmark <- paste(df_out$how_determined_landmark, paste0("restrict_by_type_", type_tier_i), sep=";")
+      } 
+      
+    }
+  }
+  
   # 2. If multiple landmarks with same name, use one if bus station
-  if(TRUE %in% grepl("bus_station|transit_station|stage_added", df_out$type)){
-    df_out <- df_out[grepl("bus_station|transit_station|stage_added", df_out$type),]
-    df_out$how_determined_landmark <- paste(df_out$how_determined_landmark, "choose_bus_station", sep=";")
-  } 
+  #if(TRUE %in% grepl("bus_station|transit_station|stage_added", df_out$type)){
+  #  df_out <- df_out[grepl("bus_station|transit_station|stage_added", df_out$type),]
+  #  df_out$how_determined_landmark <- paste(df_out$how_determined_landmark, "choose_bus_station", sep=";")
+  #} 
   
   # 3. If multiple landmarks with same name, use one if mall
-  if(TRUE %in% grepl("shopping_mall", df_out$type)){
-    df_out <- df_out[grepl("shopping_mall", df_out$type),]
-    df_out$how_determined_landmark <- paste(df_out$how_determined_landmark, "choose_shopping_mall", sep=";")
-  } 
+  #if(TRUE %in% grepl("shopping_mall", df_out$type)){
+  #  df_out <- df_out[grepl("shopping_mall", df_out$type),]
+  #  df_out$how_determined_landmark <- paste(df_out$how_determined_landmark, "choose_shopping_mall", sep=";")
+  #} 
   
   # 3. If multiple landmarks with same name, use one with more types 
   nrow_before <- nrow(df_out)
@@ -1309,6 +1324,7 @@ determine_location_from_landmark <- function(df_out,
                                              landmark_gazetteer,
                                              roads,
                                              roads_final,
+                                             type_list,
                                              crs_distance){
   
   #df_out <- subset(df_out, select=c(matched_words_tweet_spelling, matched_words_correct_spelling, dist_closest_crash_word)) %>% unique
@@ -1317,7 +1333,7 @@ determine_location_from_landmark <- function(df_out,
   df_out$how_determined_landmark <- how_determined_text
   
   if(length(unique(df_out$matched_words_correct_spelling)) > 1) df_out <- choose_between_multiple_landmarks(df_out, roads, roads_final, crs_distance)
-  if(nrow(df_out) > 1) df_out <- choose_between_landmark_same_name(df_out, roads, roads_final, crs_distance)
+  if(nrow(df_out) > 1) df_out <- choose_between_landmark_same_name(df_out, roads, roads_final, type_list, crs_distance)
   if(nrow(roads_final) %in% 1) df_out <- find_landmark_similar_name_close_to_road(df_out, roads, roads_final, landmark_gazetteer, crs_distance)
   if(nrow(roads_final) %in% 1) df_out <- snap_landmark_to_road(df_out, roads, roads_final, crs_distance)
   
