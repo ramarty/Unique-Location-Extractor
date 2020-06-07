@@ -657,8 +657,8 @@ locate_event_i <- function(text_i,
     ## Subset
     locations_in_tweet <- locations_in_tweet %>%
       landmark_road_overlap() %>%
-      exact_fuzzy_overlap() %>%
-      phase_overlap() %>%
+      phase_overlap() %>% # do this before fuzzy...
+      exact_fuzzy_overlap() %>% 
       exact_fuzzy_startendsame()
     
     locations_in_tweet_original <- locations_in_tweet
