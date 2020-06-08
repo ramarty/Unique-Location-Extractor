@@ -790,11 +790,6 @@ locate_event_i <- function(text_i,
     # Only restrict gazetteer
     if(!quiet) print("Section - 4.5")
     
-    landmark_gazetteer <<- landmark_gazetteer
-    landmark_match <<- landmark_match
-    type_list <<- type_list
-    
-    stop()
     landmark_gazetteer <- pref_type_with_gen_landmarks(landmark_gazetteer,
                                                        landmark_match,
                                                        type_list)
