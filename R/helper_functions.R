@@ -753,7 +753,7 @@ remove_general_landmarks <- function(landmark_match,
   # (1) Landmark matched list
   # (2) Gazeteer
   
-  landmark_gazetteer_gs <- merge(landmark_gazetteer, landmark_match, 
+  landmark_gazetteer_gs <- merge(landmark_gazetteer, landmark_match %>% unique(), 
                                  by.x = "name",
                                  by.y = "matched_words_correct_spelling",
                                  all.x = F)
@@ -1011,7 +1011,7 @@ pref_orig_name_with_gen_landmarks <- function(landmark_gazetteer,
   # to cases where "nairobi school" was the original landmark name (not a 
   # parallel landmark).
   
-  landmark_gazetteer_gs <- merge(landmark_gazetteer, landmark_match, 
+  landmark_gazetteer_gs <- merge(landmark_gazetteer, landmark_match %>% unique(), 
                                  by.x = "name",
                                  by.y = "matched_words_correct_spelling",
                                  all.x = F)
@@ -1060,7 +1060,7 @@ pref_type_with_gen_landmarks <- function(landmark_gazetteer,
   # to cases where "nairobi school" was the original landmark name (not a 
   # parallel landmark).
   
-  landmark_gazetteer_gs <- merge(landmark_gazetteer, landmark_match, 
+  landmark_gazetteer_gs <- merge(landmark_gazetteer, landmark_match %>% unique(), 
                                  by.x = "name",
                                  by.y = "matched_words_correct_spelling",
                                  all.x = F)
