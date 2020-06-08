@@ -790,24 +790,31 @@ locate_event_i <- function(text_i,
     # Only restrict gazetteer
     if(!quiet) print("Section - 4.5")
     
-    landmark_gazetteer <- pref_type_with_gen_landmarks(landmark_gazetteer,
-                                                       landmark_match,
-                                                       type_list)
+    if(nrow(landmark_match) > 0){
+      landmark_gazetteer <- pref_type_with_gen_landmarks(landmark_gazetteer,
+                                                         landmark_match,
+                                                         type_list)
+    }
+    
     
     # ** 4.6 Preference original name over parallel landmark -------------------
     # Only restrict gazetteer
     if(!quiet) print("Section - 4.6")
     
-    landmark_gazetteer <- pref_orig_name_with_gen_landmarks(landmark_gazetteer,
-                                                            landmark_match)
+    if(nrow(landmark_match) > 0){
+      landmark_gazetteer <- pref_orig_name_with_gen_landmarks(landmark_gazetteer,
+                                                              landmark_match)
+    }
     
     # ** 4.7 Remove general landmarks ------------------------------------------
     if(!quiet) print("Section - 4.7")
     
-    rm_gen_out <- remove_general_landmarks(landmark_match,
-                                           landmark_gazetteer)
-    landmark_match     <- rm_gen_out$landmark_match
-    landmark_gazetteer <- rm_gen_out$landmark_gazetteer
+    if(nrow(landmark_match) > 0){
+      rm_gen_out <- remove_general_landmarks(landmark_match,
+                                             landmark_gazetteer)
+      landmark_match     <- rm_gen_out$landmark_match
+      landmark_gazetteer <- rm_gen_out$landmark_gazetteer
+    }
     
     ## Update locations_in_tweet with new landmark dataframe
     # Keep all roads
