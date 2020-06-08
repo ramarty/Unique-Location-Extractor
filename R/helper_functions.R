@@ -1090,7 +1090,7 @@ pref_type_with_gen_landmarks <- function(landmark_gazetteer,
           for(type_tier_i in type_list){
             type_tier_i <- type_tier_i %>% paste(collapse="|")
             
-            if(grepl(type_tier_i, df_gaz_i$type)){
+            if(TRUE %in% grepl(type_tier_i, df_gaz_i$type)){
               df_gaz_i <- df_gaz_i[grepl(type_tier_i, df_gaz_i$type),]
             } 
             
