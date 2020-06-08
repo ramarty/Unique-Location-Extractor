@@ -551,6 +551,62 @@ locate_event_i <- function(text_i,
   
   if(nrow(locations_in_tweet) > 0){
     
+    # ** 4.-1 If road small, make landmark -------------------------------------
+    # TODO: Could do this when building aug gaz?
+    roads_match <- locations_in_tweet[locations_in_tweet$location_type %in% "road",]
+    
+    if(nrow(roads_match) > 0){
+      
+      roads_match_sp <- roads[roads$name %in% roads_match$matched_words_correct_spelling,]
+      
+      road_points <- lapply(unique(roads_match_sp$name), function(name){
+        
+        roads_match_sp_i <- roads_match_sp[roads_match_sp$name %in% name,]
+        sdf_extent <- extent(roads_match_sp_i)
+        
+        max_dist_km <- sqrt((sdf_extent@xmax - sdf_extent@xmin)^2 +
+                              (sdf_extent@ymax - sdf_extent@ymin)^2) / 1000
+        
+        if(max_dist_km <= 0.5){
+          
+          road_point <- gCentroid(roads_match_sp_i, byid=F)
+          road_point$name <- name
+          road_point$type <- "road"
+          road_point$general_specific <- "specific"
+          road_point$name_original <- name
+          
+        } else{
+          road_point <- NULL
+        }
+        
+        return(road_point)
+        
+      }) %>%
+        purrr::discard(is.null) %>%
+        do.call(what="rbind")
+      
+      if(!is.null(road_points)){
+        
+        #### Add to gazetteer
+        road_points$uid <- max(landmark_gazetteer$uid) + 1:nrow(road_points)
+        landmark_gazetteer <- list(landmark_gazetteer, road_points) %>% do.call(what = "rbind")
+        
+        #### Switch type from "road" to "landmark"
+        # Can't have both road and landmark type, as later preference
+        # roads over landmark if same name
+        locations_in_tweet$location_type[locations_in_tweet$matched_words_correct_spelling %in%
+                                           road_points$name] <- "landmark"
+        
+        
+        #roads_match_landmark <- roads_match[roads_match$matched_words_correct_spelling %in% road_points$name,]
+        #roads_match_landmark$location_type <- "landmark"
+        
+        #locations_in_tweet <- bind_rows(locations_in_tweet, 
+        #                                roads_match_landmark)
+        
+      }
+    }
+    
     # ** 4.0 Add Preposition Variables to Dataframe ----------------------------
     if(!quiet) print("Section - 4.0")
     # Loop through preposition tiers
@@ -729,27 +785,21 @@ locate_event_i <- function(text_i,
                   (matched_words_correct_spelling %in% landmark_match$matched_words_correct_spelling)))
     
     # ** 4.5 Preference types --------------------------------------------------
+    # NOTE: below two steps don't get applies to "always keep list", but OK
+    # as steps are integrated later too? Below just accounts for general
     # Only restrict gazetteer
     if(!quiet) print("Section - 4.5")
     
     landmark_gazetteer <- pref_type_with_gen_landmarks(landmark_gazetteer,
-                                                            landmark_match,
+                                                       landmark_match,
                                                        type_list)
-
+    
     # ** 4.6 Preference original name over parallel landmark -------------------
     # Only restrict gazetteer
     if(!quiet) print("Section - 4.6")
     
     landmark_gazetteer <- pref_orig_name_with_gen_landmarks(landmark_gazetteer,
                                                             landmark_match)
-    
-    #### Before remove general landmarks, update always keep list. Here, we remove
-    # landmarks from gazeteer removed during above two steps -- preferencing 
-    # types and preferencing original name
-    if(!is.null(landmark_gazetteer_alw_keep)){
-      landmark_gazetteer_alw_keep <- landmark_gazetteer_alw_keep[landmark_gazetteer_alw_keep$uid %in% 
-                                                                   landmark_gazetteer$uid,]
-    }
     
     # ** 4.7 Remove general landmarks ------------------------------------------
     if(!quiet) print("Section - 4.7")
