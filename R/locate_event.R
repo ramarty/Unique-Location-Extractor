@@ -364,7 +364,6 @@ locate_event_i <- function(text_i,
   
   #text_i %>% as.data.frame() %>% write.csv(paste0("~/Desktop/where_are_we/",Sys.time() %>% str_replace_all("-| |:", ""), ".csv"))
   
-  
   # Before subsetting
   landmark_gazetteer_orig <- landmark_gazetteer
   # 1. Determine Location Matches in Gazetteer ---------------------------------
@@ -485,6 +484,7 @@ locate_event_i <- function(text_i,
   ## Update locations_in_tweet with new landmark dataframe
   locations_in_tweet <- locations_in_tweet %>%
     filter((location_type %in% "road") | 
+             (location_type %in% "area") |
              ((location_type %in% "landmark") & 
                 (matched_words_correct_spelling %in% landmark_match$matched_words_correct_spelling)))
   
@@ -696,24 +696,7 @@ locate_event_i <- function(text_i,
                                                type_list)
     }
     
-    ## Remove general landmarks
     landmark_match <- landmark_match[landmark_match$matched_words_correct_spelling %in% locations_in_tweet$matched_words_correct_spelling,]
-    
-    
-    rm_gen_out <- remove_general_landmarks(landmark_match,
-                                           landmark_gazetteer,
-                                           road_match_sp,
-                                           type_list)
-    landmark_match     <- rm_gen_out$landmark_match
-    landmark_gazetteer <- rm_gen_out$landmark_gazetteer
-    
-    ## Update locations_in_tweet with new landmark dataframe
-    # Keep all roads
-    locations_in_tweet <- locations_in_tweet %>%
-      filter((location_type %in% "road") | 
-               ((location_type %in% "landmark") & 
-                  (matched_words_correct_spelling %in% landmark_match$matched_words_correct_spelling)))
-    
     
     # ** 4.4 Restrict by roads and neighborhood --------------------------------
     if(!quiet) print("Section - 4.4")
@@ -741,10 +724,55 @@ locate_event_i <- function(text_i,
     ## Update locations_in_tweet with new landmark dataframe
     locations_in_tweet <- locations_in_tweet %>%
       filter((location_type %in% "road") | 
+               (location_type %in% "area") |
                ((location_type %in% "landmark") & 
                   (matched_words_correct_spelling %in% landmark_match$matched_words_correct_spelling)))
     
-    #### Add always keep
+    # ** 4.5 Preference types --------------------------------------------------
+    # Only restrict gazetteer
+    if(!quiet) print("Section - 4.5")
+    
+    landmark_gazetteer <- pref_type_with_gen_landmarks(landmark_gazetteer,
+                                                            landmark_match,
+                                                       type_list)
+
+    # ** 4.6 Preference original name over parallel landmark -------------------
+    # Only restrict gazetteer
+    if(!quiet) print("Section - 4.6")
+    
+    landmark_gazetteer <- pref_orig_name_with_gen_landmarks(landmark_gazetteer,
+                                                            landmark_match)
+    
+    #### Before remove general landmarks, update always keep list. Here, we remove
+    # landmarks from gazeteer removed during above two steps -- preferencing 
+    # types and preferencing original name
+    if(!is.null(landmark_gazetteer_alw_keep)){
+      landmark_gazetteer_alw_keep <- landmark_gazetteer_alw_keep[landmark_gazetteer_alw_keep$uid %in% 
+                                                                   landmark_gazetteer$uid,]
+    }
+    
+    # ** 4.7 Remove general landmarks ------------------------------------------
+    if(!quiet) print("Section - 4.7")
+    
+    rm_gen_out <- remove_general_landmarks(landmark_match,
+                                           landmark_gazetteer)
+    landmark_match     <- rm_gen_out$landmark_match
+    landmark_gazetteer <- rm_gen_out$landmark_gazetteer
+    
+    ## Update locations_in_tweet with new landmark dataframe
+    # Keep all roads
+    locations_in_tweet <- locations_in_tweet %>%
+      filter((location_type %in% "road") | 
+               (location_type %in% "area") |
+               ((location_type %in% "landmark") & 
+                  (matched_words_correct_spelling %in% landmark_match$matched_words_correct_spelling)))
+    
+    # ** 4.8 Add always keep back in -------------------------------------------
+    if(!quiet) print("Section - 4.8")
+    
+    # TODO: further restrict landmark gaz here!! Only if always_keep no longer
+    # exists in the gazetteer, THEN we add it back it -- allows us to incorporate
+    # previous subsetting
     locations_in_tweet <- bind_rows(locations_in_tweet, locations_in_tweet_alw_keep) %>% unique()
     landmark_gazetteer <- list(landmark_gazetteer, 
                                landmark_gazetteer_alw_keep) %>%
@@ -831,7 +859,7 @@ locate_event_i <- function(text_i,
                                 "prepos_before_crashword_tier_")){
             
             prep_check_order_vec <- c(prep_check_order_vec,
-                                  paste0(prep_pattern, prep_i))
+                                      paste0(prep_pattern, prep_i))
             
           }
         }
@@ -844,7 +872,7 @@ locate_event_i <- function(text_i,
           for(prep_i in 1:length(prepositions_list)){
             
             prep_check_order_vec <- c(prep_check_order_vec,
-                                  paste0(prep_pattern, prep_i))
+                                      paste0(prep_pattern, prep_i))
             
           }
         }

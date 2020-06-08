@@ -268,7 +268,7 @@ extract_dominant_cluster <- function(sdf,
       
     }
     
-  # If above threshold  
+    # If above threshold  
   } else{
     
     if(return_general_landmarks %in% c("only_if_all_general", "all")){
@@ -466,7 +466,17 @@ phrase_in_sentence_fuzzy_i <- function(sentence,
   }
   
   if(last_letters_same){
-    last_letters_sentence <- sentence_words %>% str_sub(-1,-1)
+    last_letters_sentence <- sentence_words %>% str_sub(-1,-1) %>% unique()
+    
+    # Allow words to be plural. So if user wrote "towers" and correct word is
+    # "tower", we remove the "s" and keep "r" as an allowed last letter. For
+    # below code, if no "s", will give same letter as above.
+    last_letters_sentence_ignore_s <- sentence_words %>% str_replace_all("s$", "") %>% str_sub(-1,-1) %>% unique()
+    
+    last_letters_sentence <- c(last_letters_sentence,
+                               last_letters_sentence_ignore_s) %>%
+      unique()
+    
     phrase_list <- phrase_list[str_sub(phrase_list,-1,-1) %in% last_letters_sentence]
   }
   
@@ -703,7 +713,7 @@ remove_gaz_by_type <- function(landmark_match,
     gaz_type_i <- gaz_i[grepl(type_regex, gaz_i$type),]
     
     if(nrow(gaz_type_i) > 0){
-
+      
       gaz_i <- extract_dominant_cluster(gaz_type_i,
                                         return_general_landmarks = "all")
     } 
@@ -724,9 +734,7 @@ remove_gaz_by_type <- function(landmark_match,
 
 
 remove_general_landmarks <- function(landmark_match,
-                                     landmark_gazetteer,
-                                     road_match_sp,
-                                     type_list){
+                                     landmark_gazetteer){
   
   # General landmarks are those with multiple names, are not close to each
   # other and there is no dominant cluster. These are more likely to have
@@ -745,47 +753,34 @@ remove_general_landmarks <- function(landmark_match,
   # (1) Landmark matched list
   # (2) Gazeteer
   
-  landmark_match_gs <- merge(landmark_match, landmark_gazetteer@data, 
-                             by.x="matched_words_correct_spelling", by.y="name", 
-                             all.x=T, all.y=F)
+  landmark_gazetteer_gs <- merge(landmark_gazetteer, landmark_match, 
+                                 by.x = "name",
+                                 by.y = "matched_words_correct_spelling",
+                                 all.x = F)
   
-  #type_vector <- type_list %>% unlist() %>% paste(collapse="|")
-  #if(nchar(type_vector) >= 1){
-  #  print("a")
-  #}
+  # Pull out ones already considered general [TODO: Need to do?]
+  landmark_gazetteer_gs <- landmark_gazetteer_gs[landmark_gazetteer_gs$general_specific %in% "general",]
   
-  # If there are general landmarks AND roads
-  if(("general" %in% landmark_match_gs$general_specific) & !is.null(road_match_sp)){
+  # Re-determine general/specific
+  if(nrow(landmark_gazetteer_gs) > 0){
+    landmark_gazetteer_gs <- extract_dominant_cluster_all(landmark_gazetteer_gs,
+                                                          return_general_landmarks = "all")
     
-    ## Aggregate roads
-    road_match_agg_sp <- road_match_sp # TODO: need this, or pass in as input?
-    road_match_agg_sp$id <- 1
-    road_match_agg_sp <- raster::aggregate(road_match_agg_sp, by="id")
+    landmark_gazetteer_gs <- landmark_gazetteer_gs[landmark_gazetteer_gs$general_specific %in% "general",]
     
-    ## Grab spatial points of general landmarks found in text
-    landmark_general_sp <- landmark_gazetteer[(landmark_gazetteer$general_specific %in% "general") &
-                                                (landmark_gazetteer$uid %in% landmark_match_gs$uid),]
+    uids_to_remove <- landmark_gazetteer_gs$uid
     
-    ## Remove general landmarks far from road
-    landmark_general_sp$distance <- gDistance(landmark_general_sp, road_match_agg_sp, byid=T) %>% as.vector()
-    general_landmark_uid_remove <- landmark_general_sp$uid[landmark_general_sp$distance > 0.5*1000]
-    
-    ## Remove general landmarks
-    landmark_gazetteer <- landmark_gazetteer[!(landmark_gazetteer$uid %in% general_landmark_uid_remove),]
-    landmark_match_gs  <- landmark_match_gs[!(landmark_match_gs$uid %in% general_landmark_uid_remove),]
-    
-    # If no roads, remove all general  
-  } else{
-    landmark_match_gs  <- landmark_match_gs[!(landmark_match_gs$general_specific %in% "general"),]
-    landmark_gazetteer <- landmark_gazetteer[!(landmark_gazetteer$general_specific %in% "general"),]
+    if(nrow(landmark_gazetteer_gs) > 0){
+      
+      # Remove from gazetteer
+      landmark_gazetteer <- landmark_gazetteer[!(landmark_gazetteer$uid %in% uids_to_remove),]
+      
+      # Remove from landmarks
+      landmark_match <- landmark_match[landmark_match$matched_words_correct_spelling %in% 
+                                         landmark_gazetteer$name,]
+      
+    }
   }
-  
-  # Restrict dataframe to potentially removing general landmarks and ensure
-  # same variables as before
-  landmark_match <- landmark_match[landmark_match$matched_words_correct_spelling %in%
-                                     landmark_match_gs$matched_words_correct_spelling,]
-  # TODO: Also restrict locations_match??
-  
   return(list(landmark_match = landmark_match,
               landmark_gazetteer = landmark_gazetteer))
 }
@@ -1006,6 +1001,113 @@ extract_intersections <- function(locations_in_tweet,
   
   return(road_intersections)
   
+}
+
+pref_orig_name_with_gen_landmarks <- function(landmark_gazetteer,
+                                              landmark_match){
+  # Preferences the original name versus parallel landmark versions of names in
+  # cases of a general landmark. For example, if name found in tweet is "nairobi school", 
+  # and "nairobi school" is a general landmark, where possible restricts name
+  # to cases where "nairobi school" was the original landmark name (not a 
+  # parallel landmark).
+  
+  landmark_gazetteer_gs <- merge(landmark_gazetteer, landmark_match, 
+                                 by.x = "name",
+                                 by.y = "matched_words_correct_spelling",
+                                 all.x = F)
+  
+  # Pull out ones already considered general [TODO: Need to do?]
+  landmark_gazetteer_gs <- landmark_gazetteer_gs[landmark_gazetteer_gs$general_specific %in% "general",]
+  
+  # Re-determine general/specific
+  if(nrow(landmark_gazetteer_gs) > 0){
+    landmark_gazetteer_gs <- extract_dominant_cluster_all(landmark_gazetteer_gs,
+                                                          return_general_landmarks = "all")
+    landmark_gazetteer_gs <- landmark_gazetteer_gs[landmark_gazetteer_gs$general_specific %in% "general",]
+    
+    landmark_gazetteer_gs <- landmark_gazetteer_gs@data
+    
+    uids_orig <- landmark_gazetteer_gs$uid
+    
+    # If there are general landmarks...
+    if(nrow(landmark_gazetteer_gs) > 0){
+      
+      gaz_new <- lapply(unique(landmark_gazetteer_gs$name), function(name){
+        
+        landmark_gazetteer_gs_i <- landmark_gazetteer_gs[landmark_gazetteer_gs$name %in% name,]
+        landmark_gazetteer_gs_i_temp <- landmark_gazetteer_gs_i[landmark_gazetteer_gs_i$name == landmark_gazetteer_gs_i$name_original,]
+        if(nrow(landmark_gazetteer_gs_i_temp) > 0) landmark_gazetteer_gs_i <- landmark_gazetteer_gs_i_temp
+        
+        return(landmark_gazetteer_gs_i)
+      }) %>%
+        bind_rows()
+      
+      uids_to_remove <- setdiff(uids_orig, gaz_new$uid)
+      
+      landmark_gazetteer <- landmark_gazetteer[!(landmark_gazetteer$uid %in% uids_to_remove),]
+    }
+  }
+  
+  return(landmark_gazetteer)
+}
+
+pref_type_with_gen_landmarks <- function(landmark_gazetteer,
+                                         landmark_match,
+                                         type_list){
+  # Preferences the original name versus parallel landmark versions of names in
+  # cases of a general landmark. For example, if name found in tweet is "nairobi school", 
+  # and "nairobi school" is a general landmark, where possible restricts name
+  # to cases where "nairobi school" was the original landmark name (not a 
+  # parallel landmark).
+  
+  landmark_gazetteer_gs <- merge(landmark_gazetteer, landmark_match, 
+                                 by.x = "name",
+                                 by.y = "matched_words_correct_spelling",
+                                 all.x = F)
+  
+  # Pull out ones already considered general [TODO: Need to do?]
+  landmark_gazetteer_gs <- landmark_gazetteer_gs[landmark_gazetteer_gs$general_specific %in% "general",]
+  
+  # Re-determine general/specific
+  if(nrow(landmark_gazetteer_gs) > 0){
+    landmark_gazetteer_gs <- extract_dominant_cluster_all(landmark_gazetteer_gs,
+                                                          return_general_landmarks = "all")
+    landmark_gazetteer_gs <- landmark_gazetteer_gs[landmark_gazetteer_gs$general_specific %in% "general",]
+    
+    landmark_gazetteer_gs <- landmark_gazetteer_gs@data
+    
+    uids_orig <- landmark_gazetteer_gs$uid
+    
+    # If there are general landmarks...
+    if(nrow(landmark_gazetteer_gs) > 0){
+      
+      gaz_new <- lapply(unique(landmark_gazetteer_gs$name), function(name){
+        
+        df_gaz_i <- landmark_gazetteer_gs[landmark_gazetteer_gs$name %in% name,]
+        
+        if(length(type_list) > 0){
+          
+          for(type_tier_i in type_list){
+            type_tier_i <- type_tier_i %>% paste(collapse="|")
+            
+            if(grepl(type_tier_i, df_gaz_i$type)){
+              df_gaz_i <- df_gaz_i[grepl(type_tier_i, df_gaz_i$type),]
+            } 
+            
+          }
+        }
+        
+        return(df_gaz_i)
+      }) %>%
+        bind_rows()
+      
+      uids_to_remove <- setdiff(uids_orig, gaz_new$uid)
+      
+      landmark_gazetteer <- landmark_gazetteer[!(landmark_gazetteer$uid %in% uids_to_remove),]
+    }
+  }
+  
+  return(landmark_gazetteer)
 }
 
 ##### ******************************************************************** #####
