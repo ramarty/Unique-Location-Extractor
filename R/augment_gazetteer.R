@@ -191,6 +191,8 @@ augment_gazetteer <- function(landmarks,
     
   }
   
+  landmarks$number_words <- str_count(landmarks$name, "\\S+")
+  
   # 3. Text Cleaning -----------------------------------------------------------
   if(!quiet) print("Clean Text")
   
@@ -552,7 +554,7 @@ augment_gazetteer <- function(landmarks,
       type_i <- parallel.word_end_addtype[[i]]$type
       
       landmarks_i <- landmarks[grepl(words_i, landmarks$name),]
-      landmarks_i$type <- paste0(landmarks_i$type, ";", type_i)
+      if(nrow(landmarks_i) > 0) landmarks_i$type <- paste0(landmarks_i$type, ";", type_i)
       
       return(landmarks_i)
       
@@ -641,12 +643,13 @@ augment_gazetteer <- function(landmarks,
   # ** 7.4 General/Specific ----------------------------------------------------
   if(!quiet) print("Separating into General and Specific")
   #aa <<- landmarks
+  # TODO: Not sure if needed? As recalc in algorithm?
   landmarks_out <- extract_dominant_cluster_all(landmarks,
                                                 N_loc_limit = 500,
-                                                collapse_specific_coords = T,
+                                                collapse_specific_coords = F, # false because recalculate g/s in algorithm
                                                 return_general_landmarks = "all",
                                                 quiet = F)
-  
+
   # ** 7.5 Variables to output -------------------------------------------------
   landmarks_out@data <- landmarks_out@data %>%
     dplyr::select(name, type, general_specific, name_original)

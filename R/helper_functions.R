@@ -6,6 +6,20 @@ nrow_0 <- function(df){
   return(nrow(df) %in% 0)
 } 
 
+rbind_uniqueid <- function(...){
+  # rbind sp
+  
+  if(length(c(...)) %in% 0){
+    out <- NULL
+  } else if(length((c(...))) %in% 1){
+    out <- c(...)[1][[1]]
+  } else{
+    out <- bind(...)
+  }
+  
+  return(out)
+}
+
 bind_rows_sf <- function(...){
   # Description: Bind rows of spatial features
   
@@ -126,7 +140,29 @@ extract_dominant_cluster_all <- function(landmarks,
       return(out)
     }) %>%
       purrr::discard(is.null) %>%
-      do.call(what="rbind")
+      #raster::bind()
+      #list_merge(list(makeUniqueIDs = T)) %>%
+      do.call(what="rbind_uniqueid")
+    
+    rbind_uniqueid <- function(...){
+      # rbind sp
+      
+      if(length(c(...)) %in% 0){
+        out <- NULL
+      } else if(length((c(...))) %in% 1){
+        out <- c(...)[1][[1]]
+      } else{
+        out <- bind(...)
+      }
+      
+      return(out)
+    }
+    #
+    
+    
+
+    
+    
   } else{
     landmarks_df_far_few <- NULL
   }
@@ -759,14 +795,17 @@ remove_general_landmarks <- function(landmark_match,
                                  all.x = F)
   
   # Pull out ones already considered general [TODO: Need to do?]
+  #landmark_gazetteer_gs <- landmark_gazetteer_gs[landmark_gazetteer_gs$general_specific %in% "general",]
+  landmark_gazetteer_gs <- extract_dominant_cluster_all(landmark_gazetteer_gs,
+                                                        return_general_landmarks = "all")
+  
   landmark_gazetteer_gs <- landmark_gazetteer_gs[landmark_gazetteer_gs$general_specific %in% "general",]
   
   # Re-determine general/specific
   if(nrow(landmark_gazetteer_gs) > 0){
-    landmark_gazetteer_gs <- extract_dominant_cluster_all(landmark_gazetteer_gs,
-                                                          return_general_landmarks = "all")
-    
-    landmark_gazetteer_gs <- landmark_gazetteer_gs[landmark_gazetteer_gs$general_specific %in% "general",]
+    #landmark_gazetteer_gs <- extract_dominant_cluster_all(landmark_gazetteer_gs,
+    #                                                      return_general_landmarks = "all")
+    #landmark_gazetteer_gs <- landmark_gazetteer_gs[landmark_gazetteer_gs$general_specific %in% "general",]
     
     uids_to_remove <- landmark_gazetteer_gs$uid
     
@@ -1017,13 +1056,16 @@ pref_orig_name_with_gen_landmarks <- function(landmark_gazetteer,
                                  all.x = F)
   
   # Pull out ones already considered general [TODO: Need to do?]
+  #landmark_gazetteer_gs <- landmark_gazetteer_gs[landmark_gazetteer_gs$general_specific %in% "general",]
+  landmark_gazetteer_gs <- extract_dominant_cluster_all(landmark_gazetteer_gs,
+                                                        return_general_landmarks = "all")
   landmark_gazetteer_gs <- landmark_gazetteer_gs[landmark_gazetteer_gs$general_specific %in% "general",]
   
   # Re-determine general/specific
   if(nrow(landmark_gazetteer_gs) > 0){
-    landmark_gazetteer_gs <- extract_dominant_cluster_all(landmark_gazetteer_gs,
-                                                          return_general_landmarks = "all")
-    landmark_gazetteer_gs <- landmark_gazetteer_gs[landmark_gazetteer_gs$general_specific %in% "general",]
+    #landmark_gazetteer_gs <- extract_dominant_cluster_all(landmark_gazetteer_gs,
+    #                                                      return_general_landmarks = "all")
+    #landmark_gazetteer_gs <- landmark_gazetteer_gs[landmark_gazetteer_gs$general_specific %in% "general",]
     
     landmark_gazetteer_gs <- landmark_gazetteer_gs@data
     
@@ -1066,13 +1108,16 @@ pref_type_with_gen_landmarks <- function(landmark_gazetteer,
                                  all.x = F)
   
   # Pull out ones already considered general [TODO: Need to do?]
+  #landmark_gazetteer_gs <- landmark_gazetteer_gs[landmark_gazetteer_gs$general_specific %in% "general",]
+  landmark_gazetteer_gs <- extract_dominant_cluster_all(landmark_gazetteer_gs,
+                                                        return_general_landmarks = "all")
   landmark_gazetteer_gs <- landmark_gazetteer_gs[landmark_gazetteer_gs$general_specific %in% "general",]
   
   # Re-determine general/specific
   if(nrow(landmark_gazetteer_gs) > 0){
-    landmark_gazetteer_gs <- extract_dominant_cluster_all(landmark_gazetteer_gs,
-                                                          return_general_landmarks = "all")
-    landmark_gazetteer_gs <- landmark_gazetteer_gs[landmark_gazetteer_gs$general_specific %in% "general",]
+    #landmark_gazetteer_gs <- extract_dominant_cluster_all(landmark_gazetteer_gs,
+    #                                                      return_general_landmarks = "all")
+    #landmark_gazetteer_gs <- landmark_gazetteer_gs[landmark_gazetteer_gs$general_specific %in% "general",]
     
     landmark_gazetteer_gs <- landmark_gazetteer_gs@data
     
