@@ -788,17 +788,18 @@ locate_event_i <- function(text_i,
     # ** 4.5 Preference specific -----------------------------------------------
     # If name has both general and specific, preference specific; if all general,
     # keep all general. Only changes gazetteer
+    if(!quiet) print("Section - 4.5")
     
     if(nrow(landmark_match) > 0){
       landmark_gazetteer <- pref_specific(landmark_gazetteer,
                                           landmark_match)
     }
     
-    # ** 4.5 Preference types --------------------------------------------------
+    # ** 4.6 Preference types --------------------------------------------------
     # NOTE: below two steps don't get applies to "always keep list", but OK
     # as steps are integrated later too? Below just accounts for general
     # Only restrict gazetteer
-    if(!quiet) print("Section - 4.5")
+    if(!quiet) print("Section - 4.6")
     
     if(nrow(landmark_match) > 0){
       landmark_gazetteer <- pref_type_with_gen_landmarks(landmark_gazetteer,
@@ -808,17 +809,17 @@ locate_event_i <- function(text_i,
     
     landmark_gazetteera[landmark_gazetteera$name %in% "bellevue",]
     
-    # ** 4.6 Preference original name over parallel landmark -------------------
+    # ** 4.7 Preference original name over parallel landmark -------------------
     # Only restrict gazetteer
-    if(!quiet) print("Section - 4.6")
+    if(!quiet) print("Section - 4.7")
     
     if(nrow(landmark_match) > 0){
       landmark_gazetteer <- pref_orig_name_with_gen_landmarks(landmark_gazetteer,
                                                               landmark_match)
     }
     
-    # ** 4.7 Remove general landmarks ------------------------------------------
-    if(!quiet) print("Section - 4.7")
+    # ** 4.8 Remove general landmarks ------------------------------------------
+    if(!quiet) print("Section - 4.8")
     
     if(nrow(landmark_match) > 0){
       rm_gen_out <- remove_general_landmarks(landmark_match,
@@ -835,8 +836,8 @@ locate_event_i <- function(text_i,
                ((location_type %in% "landmark") & 
                   (matched_words_correct_spelling %in% landmark_match$matched_words_correct_spelling)))
     
-    # ** 4.8 Add always keep back in -------------------------------------------
-    if(!quiet) print("Section - 4.8")
+    # ** 4.9 Add always keep back in -------------------------------------------
+    if(!quiet) print("Section - 4.9")
     
     # TODO: further restrict landmark gaz here!! Only if always_keep no longer
     # exists in the gazetteer, THEN we add it back it -- allows us to incorporate
