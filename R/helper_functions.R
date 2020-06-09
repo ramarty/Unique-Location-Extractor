@@ -14,7 +14,7 @@ rbind_uniqueid <- function(...){
   } else if(length((c(...))) %in% 1){
     out <- c(...)[1][[1]]
   } else{
-    out <- bind(...)
+    out <- raster::bind(...)
   }
   
   return(out)
