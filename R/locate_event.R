@@ -807,8 +807,6 @@ locate_event_i <- function(text_i,
                                                          type_list)
     }
     
-    landmark_gazetteera[landmark_gazetteera$name %in% "bellevue",]
-    
     # ** 4.7 Preference original name over parallel landmark -------------------
     # Only restrict gazetteer
     if(!quiet) print("Section - 4.7")
