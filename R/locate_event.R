@@ -784,6 +784,16 @@ locate_event_i <- function(text_i,
                ((location_type %in% "landmark") & 
                   (matched_words_correct_spelling %in% landmark_match$matched_words_correct_spelling)))
     
+    
+    # ** 4.5 Preference specific -----------------------------------------------
+    # If name has both general and specific, preference specific; if all general,
+    # keep all general. Only changes gazetteer
+    
+    if(nrow(landmark_match) > 0){
+      landmark_gazetteer <- pref_specific(landmark_gazetteer,
+                                          landmark_match)
+    }
+    
     # ** 4.5 Preference types --------------------------------------------------
     # NOTE: below two steps don't get applies to "always keep list", but OK
     # as steps are integrated later too? Below just accounts for general
@@ -796,6 +806,7 @@ locate_event_i <- function(text_i,
                                                          type_list)
     }
     
+    landmark_gazetteera[landmark_gazetteera$name %in% "bellevue",]
     
     # ** 4.6 Preference original name over parallel landmark -------------------
     # Only restrict gazetteer
@@ -831,6 +842,11 @@ locate_event_i <- function(text_i,
     # exists in the gazetteer, THEN we add it back it -- allows us to incorporate
     # previous subsetting
     locations_in_tweet <- bind_rows(locations_in_tweet, locations_in_tweet_alw_keep) %>% unique()
+    
+    # If name in alw_keep gazetteer still exists in main gazetteer, remove from alw_keep
+    landmark_gazetteer_alw_keep <- landmark_gazetteer_alw_keep[!(landmark_gazetteer_alw_keep$name %in% 
+                                                                 landmark_gazetteer$name),]
+    
     landmark_gazetteer <- list(landmark_gazetteer, 
                                landmark_gazetteer_alw_keep) %>%
       purrr::discard(is.null) %>%

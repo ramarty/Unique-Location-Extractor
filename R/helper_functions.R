@@ -1042,6 +1042,46 @@ extract_intersections <- function(locations_in_tweet,
   
 }
 
+pref_specific <- function(landmark_gazetteer,
+                          landmark_match){
+  
+  # If landmark name has both general and specific, only keep specific; if only
+  # has one type (general or specific), keep all. Only affects gazetteer, not
+  # landmark
+  
+  landmark_gazetteer_gs <- merge(landmark_gazetteer, landmark_match %>% unique(), 
+                                 by.x = "name",
+                                 by.y = "matched_words_correct_spelling",
+                                 all.x = F)
+  
+  landmark_gazetteer_gs <- extract_dominant_cluster_all(landmark_gazetteer_gs,
+                                                        return_general_landmarks = "all")
+  landmark_gazetteer_gs <- landmark_gazetteer_gs@data
+  
+  uids_orig <- landmark_gazetteer_gs$uid
+  
+  gaz_new <- lapply(unique(landmark_gazetteer_gs$name), function(name){
+    landmark_gazetteer_gs_i <- landmark_gazetteer_gs[landmark_gazetteer_gs$name %in% name,]
+    
+    # If 2 types (so both general and specific), restrict to specific. We don't
+    # change if all general or all specific (ie, one type)
+    N_gs_types <- landmark_gazetteer_gs_i$general_specific %>% unique %>% length()
+    if(N_gs_types %in% 2){
+      landmark_gazetteer_gs_i <- landmark_gazetteer_gs_i[landmark_gazetteer_gs_i$general_specific %in% "specific",]
+    }
+    
+    return(landmark_gazetteer_gs_i)
+  }) %>%
+    bind_rows()
+  
+  uids_to_remove <- setdiff(uids_orig, gaz_new$uid)
+  
+  landmark_gazetteer <- landmark_gazetteer[!(landmark_gazetteer$uid %in% uids_to_remove),]
+  
+  return(landmark_gazetteer)
+}
+
+
 pref_orig_name_with_gen_landmarks <- function(landmark_gazetteer,
                                               landmark_match){
   # Preferences the original name versus parallel landmark versions of names in
