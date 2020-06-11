@@ -793,6 +793,7 @@ locate_event_i <- function(text_i,
     if(nrow(landmark_match) > 0){
       landmark_gazetteer <- pref_specific(landmark_gazetteer,
                                           landmark_match)
+
     }
     
     # ** 4.6 Preference types --------------------------------------------------
