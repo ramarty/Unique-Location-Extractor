@@ -371,13 +371,24 @@ locate_event_i <- function(text_i,
   
   if(!quiet) print("Section - 1")
   #### Exact Match
-  landmark_match     <- phrase_in_sentence_exact(text_i, landmark_list) 
-  road_match         <- phrase_in_sentence_exact(text_i, roads_list)
-  area_match <- phrase_in_sentence_exact(text_i, areas_list)
+  ## Remove certain words when looking for an exact match
+  
+  text_i_extract_exact <- text_i %>% 
+    str_replace_all(paste0("\\b", paste(event_words, collapse = "|"), "\\b"),
+                    "blankwordblankword") # add dummy word to prevent new 
+                                          # word pair from being made
+  
+  landmark_match     <- phrase_in_sentence_exact(text_i_extract_exact, 
+                                                 landmark_list) 
+  road_match         <- phrase_in_sentence_exact(text_i_extract_exact, 
+                                                 roads_list)
+  area_match <- phrase_in_sentence_exact(text_i_extract_exact, 
+                                         areas_list)
   
   #### Fuzzy
   if(fuzzy_match %in% TRUE){
-    words_to_remove_fuzzy <- c(prepositions_all, event_words, junction_words) %>% unlist()
+    # TODO: paramaterize additional words that can't be spelled wrong - eg, nairobi
+    words_to_remove_fuzzy <- c(prepositions_all, event_words, junction_words, "nairobi") %>% unlist()
     landmark_match_fuzzy <- phrase_in_sentence_fuzzy(text_i, 
                                                      landmark_list,
                                                      fuzzy_match.min_word_length, 
@@ -567,7 +578,7 @@ locate_event_i <- function(text_i,
         max_dist_km <- sqrt((sdf_extent@xmax - sdf_extent@xmin)^2 +
                               (sdf_extent@ymax - sdf_extent@ymin)^2) / 1000
         
-        if(max_dist_km <= 0.5){
+        if(max_dist_km <= 0.75){
           
           road_point <- gCentroid(roads_match_sp_i, byid=F)
           road_point$name <- name
@@ -712,9 +723,9 @@ locate_event_i <- function(text_i,
     if(!quiet) print("Section - 4.3")
     ## Subset
     locations_in_tweet <- locations_in_tweet %>%
-      landmark_road_overlap() %>%
-      phase_overlap() %>% # do this before fuzzy...
       exact_fuzzy_overlap() %>% 
+      landmark_road_overlap() %>%
+      phase_overlap() %>% # do this before fuzzy... (no? why?)
       exact_fuzzy_startendsame()
     
     locations_in_tweet_original <- locations_in_tweet
@@ -759,6 +770,24 @@ locate_event_i <- function(text_i,
     
     landmark_match <- landmark_match[landmark_match$matched_words_correct_spelling %in% locations_in_tweet$matched_words_correct_spelling,]
     
+    # Do again, after restricting locations (eg, if area and road overlap, choose road -- eg, langata rd)
+    road_match     <- locations_in_tweet[locations_in_tweet$location_type %in% "road",]
+    area_match     <- locations_in_tweet[locations_in_tweet$location_type %in% "area",]
+    
+    ## Road shapefile
+    if(nrow(road_match) > 0){
+      road_match_sp <- roads[roads$name %in% road_match$matched_words_correct_spelling,]
+    } else{
+      road_match_sp <- NULL # create variable; lateer functions check if null
+    }
+    
+    ## Areas shapefile
+    if(nrow(area_match) > 0){
+      area_match_sp <- areas[areas$name %in% area_match$matched_words_correct_spelling,]
+    } else{
+      area_match_sp <- NULL
+    }
+    
     ## Roads
     if(nrow(road_match) > 0 & nrow(landmark_match) > 0){
       land_road_restrict <- restrict_landmarks_by_location(landmark_match,
@@ -793,9 +822,9 @@ locate_event_i <- function(text_i,
     if(nrow(landmark_match) > 0){
       landmark_gazetteer <- pref_specific(landmark_gazetteer,
                                           landmark_match)
-
+      
     }
-    
+  
     # ** 4.6 Preference types --------------------------------------------------
     # NOTE: below two steps don't get applies to "always keep list", but OK
     # as steps are integrated later too? Below just accounts for general
@@ -845,7 +874,7 @@ locate_event_i <- function(text_i,
     
     # If name in alw_keep gazetteer still exists in main gazetteer, remove from alw_keep
     landmark_gazetteer_alw_keep <- landmark_gazetteer_alw_keep[!(landmark_gazetteer_alw_keep$name %in% 
-                                                                 landmark_gazetteer$name),]
+                                                                   landmark_gazetteer$name),]
     
     landmark_gazetteer <- list(landmark_gazetteer, 
                                landmark_gazetteer_alw_keep) %>%

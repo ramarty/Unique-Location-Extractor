@@ -54,8 +54,8 @@ make_gram_df_chunks <- function(df, chunk_size, FUN){
 }
 
 extract_dominant_cluster_all <- function(landmarks,
-                                         close_thresh_km = 0.75,
-                                         cluster_thresh = 0.67,
+                                         close_thresh_km = 9, #0.75,
+                                         cluster_thresh = 0.624,
                                          N_loc_limit = 100,
                                          collapse_specific_coords = F,
                                          return_general_landmarks = "none",
@@ -205,7 +205,7 @@ extract_dominant_cluster_all <- function(landmarks,
 }
 
 extract_dominant_cluster <- function(sdf,
-                                     close_thresh_km = 0.75,
+                                     close_thresh_km = 0.9, #0.75,
                                      cluster_thresh = 0.624,
                                      N_loc_limit = 100,
                                      collapse_specific_coords = F,
@@ -829,12 +829,12 @@ remove_general_landmarks <- function(landmark_match,
 # function where have a parameter for the (1) variable and (2) which one wins,
 # if make this into something where only two types
 landmark_road_overlap <- function(locations_in_tweet){
-  # Landmark intersects with road, choose road 
+  # Landmark intersects with road OR area, choose road 
   
   # If road name intersects with landmark name, remove landmark 
   # airtel msa rd: landmark: "airtel mesa", road: "msa rd"
   
-  if( (TRUE %in% (locations_in_tweet$location_type %in% "landmark")) & (TRUE %in% (locations_in_tweet$location_type %in% "road")) ){
+  if( (TRUE %in% (locations_in_tweet$location_type %in% c("landmark", "area") )) & (TRUE %in% (locations_in_tweet$location_type %in% "road")) ){
     
     # Road locations
     locations_in_tweet_roads <- locations_in_tweet[locations_in_tweet$location_type %in% "road",]
@@ -847,7 +847,7 @@ landmark_road_overlap <- function(locations_in_tweet){
       
       keep <- TRUE
       
-      if(locations_in_tweet$location_type[i] %in% "landmark"){
+      if(locations_in_tweet$location_type[i] %in% c("landmark", "area") ){
         if(TRUE %in% (locations_in_tweet$word_loc_min[i]:locations_in_tweet$word_loc_max[i] %in% road_locations)){
           keep <- FALSE
         }
@@ -958,7 +958,7 @@ landmark_road_samename <- function(locations_in_tweet){
 
 extract_intersections <- function(locations_in_tweet,
                                   roads,
-                                  point_dist_thresh = 500,
+                                  point_dist_thresh = 750, # Bit larger than 500; add 50 in buffer, for ex
                                   road_buffer = 50){
   # DESCRIPTION: Finds intersections between roads and returns if points of 
   # intersections are close together (ie, returns nothing if two roads 
