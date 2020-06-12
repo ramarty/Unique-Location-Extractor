@@ -1606,8 +1606,7 @@ find_landmark_similar_name_close_to_road <- function(df_out,
     
     ## If there is no dominant cluster, restrict to where starts with landmark
     # name and check again
-    
-    if(!is.null(dom_cluster)){
+    if(is.null(dom_cluster)){
       regex_search_startstring <- paste0("^", unique(df_out$matched_words_correct_spelling), "\\b") %>% paste(collapse="|")
       landmark_gazetteer_subset <- landmark_gazetteer_subset[grepl(regex_search_startstring, landmark_gazetteer_subset$name),]
       
