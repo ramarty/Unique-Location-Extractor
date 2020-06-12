@@ -160,7 +160,7 @@ extract_dominant_cluster_all <- function(landmarks,
     #
     
     
-
+    
     
     
   } else{
@@ -1528,7 +1528,8 @@ find_landmark_similar_name_close_to_road <- function(df_out,
                                                      roads,
                                                      roads_final,
                                                      landmark_gazetteer,
-                                                     crs_distance){
+                                                     crs_distance,
+                                                     text_i){
   # Find other landmarks with similar name as landmarks in df_out that might
   # be near the road. Here, we start with the landmark names in df_out. If
   # they are far (more than 500 meters) from the mentioned road, this might
@@ -1540,6 +1541,16 @@ find_landmark_similar_name_close_to_road <- function(df_out,
   # 2. Of above landmarks, checks whether they are within 100 meters of mentioned road
   # 3. If more than one landmark found, check if all close together
   # 4. If the above conditions don't hold, we stay with the original landmarks
+  
+  # TODO: This is somewhat doing 2 things now, which we could separate
+  # 1. Now, above description isn't entirely accurate. We take the found landmark
+  #    and if not close to mentioned road, we grab all landmarks with that name
+  #    anywhere. We take the next word in the tweet, and see if that is anywhere
+  #    and we restrict until we can't restrict anymore. We check for a dominant
+  #    cluster then use that.
+  # 2. But, if no dominant cluster, we further restrict to cases where the found
+  #    landmark is the START of the word of the gazetteer names. We check for 
+  #    a dominant cluster again.
   
   df_out_sp <- df_out
   coordinates(df_out_sp) <- ~lon+lat
@@ -1560,38 +1571,88 @@ find_landmark_similar_name_close_to_road <- function(df_out,
     landmark_gazetteer_subset$distance_road <- as.numeric(gDistance(landmark_gazetteer_subset, roads_i, byid=T))
     landmark_gazetteer_subset <- landmark_gazetteer_subset[landmark_gazetteer_subset$distance_road <= 100,]
     
+    #landmark_gazetteer_subset$name[5] <- "laboratory and allied ltd"
+    
     ##### If multiple close by, use one where mentioned word is at start of landmark
     # If none start a landmark, don't subset.
     # E.g., "accident at dbt mombasa rd" , following found: "dbt center" and "moneygram at dbt"; choose "dbt center"
-    regex_search_startstring <- paste0("^", unique(df_out$matched_words_correct_spelling), "\\b") %>% paste(collapse="|")
-    landmark_gazetteer_subset_TEMP <- landmark_gazetteer_subset[grepl(regex_search_startstring,landmark_gazetteer_subset$name),]
-    if(nrow(landmark_gazetteer_subset_TEMP) >= 1) landmark_gazetteer_subset <- landmark_gazetteer_subset_TEMP
+    #regex_search_startstring <- paste0("^", unique(df_out$matched_words_correct_spelling), "\\b") %>% paste(collapse="|")
     
-    if(nrow(landmark_gazetteer_subset) >= 1){
-      landmark_gazetteer_subset <- as.data.frame(landmark_gazetteer_subset)
+    #### NEW
+    text_words <- text_i %>% words()
+    
+    next_word_i <- df_out$word_loc_max[1] + 1
+    next_word <- text_words[next_word_i]
+    next_word_regex <- paste0("\\b", next_word, "\\b")
+    
+    landmark_gazetteer_subset_TEMP <- landmark_gazetteer_subset # initialize for while loop
+    while((nrow(landmark_gazetteer_subset_TEMP) >= 1) & !is.na(next_word)){
+      landmark_gazetteer_subset_TEMP <- landmark_gazetteer_subset[grepl(next_word_regex,landmark_gazetteer_subset$name),]
+      if(nrow(landmark_gazetteer_subset_TEMP) >= 1) landmark_gazetteer_subset <- landmark_gazetteer_subset_TEMP
+      
+      next_word_i <- next_word_i + 1
+      next_word <- text_words[next_word_i]
+      next_word_regex <- paste0("\\b", next_word, "\\b")
+    } 
+    
+    ## Check for dominant cluster
+    dom_cluster <- extract_dominant_cluster(landmark_gazetteer_subset,
+                                            collapse_specific_coords = T,
+                                            return_general_landmarks = "none")
+    
+    # If not, restrict to where START with name....
+    
+    ## If there is no dominant cluster, restrict to where starts with landmark
+    # name and check again
+    
+    if(!is.null(dom_cluster)){
+      regex_search_startstring <- paste0("^", unique(df_out$matched_words_correct_spelling), "\\b") %>% paste(collapse="|")
+      landmark_gazetteer_subset <- landmark_gazetteer_subset[grepl(regex_search_startstring, landmark_gazetteer_subset$name),]
+      
+      dom_cluster <- extract_dominant_cluster(landmark_gazetteer_subset,
+                                              collapse_specific_coords = T,
+                                              return_general_landmarks = "none")
+    }
+    
+    ## If there is a dominant cluster ...
+    if(!is.null(dom_cluster)){
+      
+      coords <- gCentroid(dom_cluster)
+      
+      df_out$lat <- coordinates(coords)[[2]]
+      df_out$lon <- coordinates(coords)[[1]]
+      df_out$matched_words_correct_spelling <- paste(c(unique(df_out$matched_words_correct_spelling),unique(landmark_gazetteer_subset$name)), collapse=";")
+      df_out$how_determined_landmark <- paste(df_out$how_determined_landmark, "broadended_landmark_search_found_landmarks_similar_name_near_road", sep=";")
+      
+    }
+    
+    #### END NEW
+
+    #if(nrow(landmark_gazetteer_subset) >= 1){
+    #  landmark_gazetteer_subset <- as.data.frame(landmark_gazetteer_subset)
       
       ## Maximum distance between coordinates
-      lat_min <- min(landmark_gazetteer_subset$lat)
-      lat_max <- max(landmark_gazetteer_subset$lat)
-      lon_min <- min(landmark_gazetteer_subset$lon)
-      lon_max <- max(landmark_gazetteer_subset$lon)
-      max_dist <- sqrt((lat_max - lat_min)^2 + (lon_max - lon_min)^2)
+    #  lat_min <- min(landmark_gazetteer_subset$lat)
+    #  lat_max <- max(landmark_gazetteer_subset$lat)
+    #  lon_min <- min(landmark_gazetteer_subset$lon)
+    #  lon_max <- max(landmark_gazetteer_subset$lon)
+    #  max_dist <- sqrt((lat_max - lat_min)^2 + (lon_max - lon_min)^2)
       
       # SEE IF THERE IS A DOMINANT CLUSTER HERE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! TODO
       
       ## If coordinates close
-      if(max_dist <= 500){
-        lat_mean <- mean(landmark_gazetteer_subset$lat)
-        lon_mean <- mean(landmark_gazetteer_subset$lon)
+    #  if(max_dist <= 500){
+    #    lat_mean <- mean(landmark_gazetteer_subset$lat)
+    #    lon_mean <- mean(landmark_gazetteer_subset$lon)
         
-        df_out <- df_out[1,]
+    #    df_out <- df_out[1,]
         
-        df_out$lat <- lat_mean
-        df_out$lon <- lon_mean
-        df_out$matched_words_correct_spelling <- paste(c(unique(df_out$matched_words_correct_spelling),unique(landmark_gazetteer_subset$name)), collapse=";")
-        df_out$how_determined_landmark <- paste(df_out$how_determined_landmark, "broadended_landmark_search_found_landmarks_similar_name_near_road", sep=";")
-      }
-    }
+    #    df_out$lat <- lat_mean
+    #    df_out$lon <- lon_mean
+    #    df_out$matched_words_correct_spelling <- paste(c(unique(df_out$matched_words_correct_spelling),unique(landmark_gazetteer_subset$name)), collapse=";")
+    #    df_out$how_determined_landmark <- paste(df_out$how_determined_landmark, "broadended_landmark_search_found_landmarks_similar_name_near_road", sep=";")
+    #  }
+    #}
     
   }
   
@@ -1605,7 +1666,8 @@ determine_location_from_landmark <- function(df_out,
                                              roads,
                                              roads_final,
                                              type_list,
-                                             crs_distance){
+                                             crs_distance,
+                                             text_i){
   
   #df_out <- subset(df_out, select=c(matched_words_tweet_spelling, matched_words_correct_spelling, dist_closest_crash_word)) %>% unique
   df_out <- merge(df_out, landmark_gazetteer, by.x="matched_words_correct_spelling", by.y="name", all.x=T, all.y=F)
@@ -1614,10 +1676,14 @@ determine_location_from_landmark <- function(df_out,
   
   if(length(unique(df_out$matched_words_correct_spelling)) > 1) df_out <- choose_between_multiple_landmarks(df_out, roads, roads_final, crs_distance)
   if(nrow(df_out) > 1) df_out <- choose_between_landmark_same_name(df_out, roads, roads_final, type_list, crs_distance)
-  if(nrow(roads_final) %in% 1) df_out <- find_landmark_similar_name_close_to_road(df_out, roads, roads_final, landmark_gazetteer, crs_distance)
+  if(nrow(roads_final) %in% 1) df_out <- find_landmark_similar_name_close_to_road(df_out, roads, roads_final, landmark_gazetteer, crs_distance, text_i)
   if(nrow(roads_final) %in% 1) df_out <- snap_landmark_to_road(df_out, roads, roads_final, crs_distance)
   
   df_out$type <- "landmark"
+  
+  if(is.null(df_out$dist_closest_crash_word[1])){
+    df_out$dist_closest_crash_word <- NA
+  }
   
   df_out <- subset(df_out, select=c(lon, lat, matched_words_correct_spelling, matched_words_tweet_spelling, type, how_determined_landmark, dist_closest_crash_word))
   

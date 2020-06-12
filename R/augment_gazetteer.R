@@ -130,6 +130,11 @@ augment_gazetteer <- function(landmarks,
   #### Prep spatial
   landmarks <- spTransform(landmarks, CRS(crs_distance))
   
+  # 2. Basic initial cleaning --------------------------------------------------
+  landmarks$name <- landmarks$name %>%
+    str_replace_all("&", " and ") %>%
+    str_squish()
+  
   # 3. Initial Parallel Landmarks ----------------------------------------------
   # These are parallel landmarks that should be added before any cleaning is 
   # done. For example, these rely on symbols to break up the landmark

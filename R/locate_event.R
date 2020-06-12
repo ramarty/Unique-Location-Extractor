@@ -728,8 +728,8 @@ locate_event_i <- function(text_i,
     if(!quiet) print("Section - 4.3")
     ## Subset
     locations_in_tweet <- locations_in_tweet %>%
+      landmark_road_overlap() %>% # if goes after fuzzy, keep roads before this?
       exact_fuzzy_overlap() %>% 
-      landmark_road_overlap() %>%
       phase_overlap() %>% # do this before fuzzy... (no? why?)
       exact_fuzzy_startendsame()
     
@@ -1047,7 +1047,8 @@ locate_event_i <- function(text_i,
             roads,
             roads_final,
             type_list,
-            crs_distance)
+            crs_distance,
+            text_i)
           
           loc_searched <- TRUE
         }
@@ -1101,7 +1102,8 @@ locate_event_i <- function(text_i,
         roads,
         roads_final,
         type_list,
-        crs_distance)
+        crs_distance,
+        text_i)
       
       loc_searched <- TRUE
       
