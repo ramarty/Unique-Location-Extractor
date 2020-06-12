@@ -114,9 +114,9 @@ locate_event <- function(text,
     stop(paste0(landmark_gazetteer.type_var, " is not a variable in landmark_gazetteer"))
   }
   
-  if(is.null(landmark_gazetteer[[landmark_gazetteer.gs_var]])){
-    stop(paste0(landmark_gazetteer.gs_var, " is not a variable in landmark_gazetteer"))
-  }
+  #if(is.null(landmark_gazetteer[[landmark_gazetteer.gs_var]])){
+  #  stop(paste0(landmark_gazetteer.gs_var, " is not a variable in landmark_gazetteer"))
+  #}
   
   if(!(class(roads)[1] %in% c("SpatialPolygonsDataFrame",
                               "SpatialLinesDataFrame",
@@ -145,7 +145,7 @@ locate_event <- function(text,
   #### Add variables
   landmark_gazetteer$name <- landmark_gazetteer[[landmark_gazetteer.name_var]]
   landmark_gazetteer$type <- landmark_gazetteer[[landmark_gazetteer.type_var]]
-  landmark_gazetteer$general_specific <- landmark_gazetteer[[landmark_gazetteer.gs_var]]
+  #landmark_gazetteer$general_specific <- landmark_gazetteer[[landmark_gazetteer.gs_var]]
   
   roads$name <- roads[[roads.name_var]]
   areas$name <- areas[[areas.name_var]]
@@ -625,6 +625,11 @@ locate_event_i <- function(text_i,
       
       prepositions <- prepositions_list[[i]]
       
+      # Consider event words as tier 1 [eg, accident X]
+      #if(i %in% 1){
+      #  prepositions <- c(prepositions, event_words)
+      #}
+      
       #### locations_in_tweet dataframe
       locations_in_tweet[[paste0("crashword_prepos_tier_", i)]] <- 
         search_crashword_prepos(text_i, locations_in_tweet$matched_words_tweet_spelling, event_words, prepositions)
@@ -809,7 +814,7 @@ locate_event_i <- function(text_i,
     }
     
     ## Tier 1 Landmarks
-    if(nrow(landmark_match) > 0){
+    if(nrow(landmark_match) > 0 & T){
       landmark_gazetteer <- restrict_gaz_tier1_landmarks(landmark_match,
                                                          landmark_gazetteer)
     }
@@ -821,38 +826,75 @@ locate_event_i <- function(text_i,
                ((location_type %in% "landmark") & 
                   (matched_words_correct_spelling %in% landmark_match$matched_words_correct_spelling)))
     
-    # ** 4.5 Preference specific -----------------------------------------------
-    # If name has both general and specific, preference specific; if all general,
-    # keep all general. Only changes gazetteer
-    if(!quiet) print("Section - 4.5")
     
+    # ** 4.5 Restrict Gazetteer ------------------------------------------------
+    if(!quiet) print("Section - 4.5")
     if(nrow(landmark_match) > 0){
-      landmark_gazetteer <- pref_specific(landmark_gazetteer,
-                                          landmark_match)
+      
+      # If name has both general and specific, preference specific; if all general,
+      # keep all general. Only changes gazetteer
+      
+      # If name has both general and specific, preference specific; if all general,
+      # keep all general. Only changes gazetteer.
+      # We do a similar step before; however, here we allow a less strict measure
+      # of what we define as specific. 
+      
+      landmark_gazetteer <- landmark_gazetteer %>%
+        pref_specific(landmark_match) %>%
+        pref_type_with_gen_landmarks(landmark_match,
+                                     type_list) %>%
+        pref_orig_name_with_gen_landmarks(landmark_match) %>%
+        pref_specific(landmark_match,
+                      cluster_thresh = 0.51)
+      
+      #a <- landmark_gazetteer[landmark_gazetteer$name %in% "konza",] 
+      #a <- spTransform(a, CRS("+init=epsg:4326"))
+      #leaflet() %>% addTiles() %>% addCircles(data=a)
       
     }
+
+    # ** 4.5 Preference specific -----------------------------------------------
+
+    #if(!quiet) print("Section - 4.5")
+    
+    #if(nrow(landmark_match) > 0){
+    #  landmark_gazetteer <- pref_specific(landmark_gazetteer,
+    #                                      landmark_match)
+    #  
+    #}
     
     # ** 4.6 Preference types --------------------------------------------------
     # NOTE: below two steps don't get applies to "always keep list", but OK
     # as steps are integrated later too? Below just accounts for general
     # Only restrict gazetteer
-    if(!quiet) print("Section - 4.6")
+    #if(!quiet) print("Section - 4.6")
     
-    if(nrow(landmark_match) > 0){
-      landmark_gazetteer <- pref_type_with_gen_landmarks(landmark_gazetteer,
-                                                         landmark_match,
-                                                         type_list)
-    }
+    #if(nrow(landmark_match) > 0){
+    #  landmark_gazetteer <- pref_type_with_gen_landmarks(landmark_gazetteer,
+    #                                                     landmark_match,
+    #                                                     type_list)
+    #}
     
     # ** 4.7 Preference original name over parallel landmark -------------------
     # Only restrict gazetteer
-    if(!quiet) print("Section - 4.7")
+    #if(!quiet) print("Section - 4.7")
     
-    if(nrow(landmark_match) > 0){
-      landmark_gazetteer <- pref_orig_name_with_gen_landmarks(landmark_gazetteer,
-                                                              landmark_match)
-    }
+    #if(nrow(landmark_match) > 0){
+    #  landmark_gazetteer <- pref_orig_name_with_gen_landmarks(landmark_gazetteer,
+    #                                                          landmark_match)
+    #}
     
+    # ** 4.5 Preference specific with less strict conditions -------------------
+
+    
+    #if(!quiet) print("Section - 4.8")
+    
+    #if(nrow(landmark_match) > 0){
+    #  landmark_gazetteer <- pref_specific(landmark_gazetteer,
+    #                                      landmark_match,
+    #                                      cluster_thresh = 0.51)
+    #}
+
     # ** 4.8 Remove general landmarks ------------------------------------------
     if(!quiet) print("Section - 4.8")
     
@@ -903,6 +945,11 @@ locate_event_i <- function(text_i,
     for(i in 1:length(prepositions_list)){
       
       prepositions <- prepositions_list[[i]]
+      
+      # Consider event words as tier 1 [eg, accident X]
+      #if(i %in% 1){
+      #  prepositions <- c(prepositions, event_words)
+      #}
       
       #### locations_in_tweet dataframe
       locations_in_tweet[[paste0("crashword_prepos_tier_", i)]] <- 

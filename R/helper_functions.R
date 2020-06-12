@@ -54,7 +54,7 @@ make_gram_df_chunks <- function(df, chunk_size, FUN){
 }
 
 extract_dominant_cluster_all <- function(landmarks,
-                                         close_thresh_km = 9, #0.75,
+                                         close_thresh_km = .9, #0.75,
                                          cluster_thresh = 0.624,
                                          N_loc_limit = 100,
                                          collapse_specific_coords = F,
@@ -1131,7 +1131,8 @@ extract_intersections <- function(locations_in_tweet,
 }
 
 pref_specific <- function(landmark_gazetteer,
-                          landmark_match){
+                          landmark_match,
+                          cluster_thresh = 0.624){
   
   # If landmark name has both general and specific, only keep specific; if only
   # has one type (general or specific), keep all. Only affects gazetteer, not
@@ -1144,7 +1145,8 @@ pref_specific <- function(landmark_gazetteer,
                                  all.x = F)
   
   landmark_gazetteer_gs <- extract_dominant_cluster_all(landmark_gazetteer_gs,
-                                                        return_general_landmarks = "all")
+                                                        return_general_landmarks = "all",
+                                                        cluster_thresh = cluster_thresh)
   landmark_gazetteer_gs <- landmark_gazetteer_gs@data
   
   uids_orig <- landmark_gazetteer_gs$uid
@@ -1617,7 +1619,7 @@ determine_location_from_landmark <- function(df_out,
   
   df_out$type <- "landmark"
   
-  df_out <- subset(df_out, select=c(lon, lat, matched_words_correct_spelling, matched_words_tweet_spelling, type, how_determined_landmark))
+  df_out <- subset(df_out, select=c(lon, lat, matched_words_correct_spelling, matched_words_tweet_spelling, type, how_determined_landmark, dist_closest_crash_word))
   
   return(df_out)
 }
