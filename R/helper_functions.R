@@ -277,7 +277,6 @@ extract_dominant_cluster <- function(sdf,
     sdf_dist_mat_list <- sdf_dist_mat %>% as.vector()
     cluster_exists <- mean(sdf_dist_mat_list <= close_thresh_km) >= cluster_thresh
     
-    print(cluster_exists)
     
     # If cluster exists, extract coordinates of dominant cluster
     if(cluster_exists){
