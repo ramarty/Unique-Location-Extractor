@@ -46,7 +46,7 @@ augment_gazetteer <- function(landmarks,
                               parallel.rm_begin_iftype = NULL,
                               parallel.rm_end_iftype = list(list(words = c("stage", "bus stop"), type = "transit_station")),
                               parallel.word_diff_iftype = list(list(words = c("stage", "bus stop", "bus station"), type = "transit_station")),
-                              parallel.add_only_if_name_new = T, 
+                              parallel.add_only_if_name_new = F, 
                               parallel.add_only_if_specific = F, 
                               parallel.word_begin_addtype = NULL,
                               parallel.word_end_addtype = list(list(words = c("stage", "bus stop", "bus station"), type = "stage")),
@@ -411,10 +411,12 @@ augment_gazetteer <- function(landmarks,
   }
   
   #### Replace words
+  # replace in name AND name_original. This is helpful in algorithm when preferencing
+  # matches with the original name
   if(is.null(word_diffs)){
-    par_landmarks.word_diff_iftype <- NULL
+    par_landmarks.word_diff <- NULL
   } else{
-    par_landmarks.word_diff_iftype <- lapply(word_diffs, function(words_i){
+    par_landmarks.word_diff <- lapply(word_diffs, function(words_i){
       
       ## All combinations of word pairs
       word_combns <- combn(words_i,2)
@@ -424,11 +426,13 @@ augment_gazetteer <- function(landmarks,
         v1 <- word_combns[,ci][1]
         v2 <- word_combns[,ci][2]
         
-        landmarks_v1 <- landmarks[grepl(paste0("\\b",v1,"\\b"), landmarks$name),]
-        landmarks_v1$name <- landmarks_v1$name %>% str_replace_all(v1, v2) %>% str_squish
+        landmarks_v1               <- landmarks[grepl(paste0("\\b",v1,"\\b"), landmarks$name),]
+        landmarks_v1$name          <- landmarks_v1$name          %>% str_replace_all(v1, v2) %>% str_squish
+        landmarks_v1$name_original <- landmarks_v1$name_original %>% str_replace_all(v1, v2) %>% str_squish
         
-        landmarks_v2 <- landmarks[grepl(paste0("\\b",v2,"\\b"), landmarks$name),]
-        landmarks_v2$name <- landmarks_v2$name %>% str_replace_all(v2, v1) %>% str_squish
+        landmarks_v2               <- landmarks[grepl(paste0("\\b",v2,"\\b"), landmarks$name),]
+        landmarks_v2$name          <- landmarks_v2$name          %>% str_replace_all(v2, v1) %>% str_squish
+        landmarks_v2$name_original <- landmarks_v2$name_original %>% str_replace_all(v2, v1) %>% str_squish
         
         landmarks_v12 <- list(landmarks_v1, landmarks_v2) %>% purrr::discard(nrow_0) %>% do.call(what = "rbind")
       }) %>%
@@ -503,9 +507,11 @@ augment_gazetteer <- function(landmarks,
         
         landmarks_v1 <- landmarks[grepl(paste0("\\b",v1,"\\b"), landmarks$name) & grepl(type_i, landmarks$type),]
         landmarks_v1$name <- landmarks_v1$name %>% str_replace_all(v1, v2) %>% str_squish
+        landmarks_v1$name_original <- landmarks_v1$name_original %>% str_replace_all(v1, v2) %>% str_squish
         
         landmarks_v2 <- landmarks[grepl(paste0("\\b",v2,"\\b"), landmarks$name) & grepl(type_i, landmarks$type),]
         landmarks_v2$name <- landmarks_v2$name %>% str_replace_all(v2, v1) %>% str_squish
+        landmarks_v2$name_original <- landmarks_v2$name_original %>% str_replace_all(v2, v1) %>% str_squish
         
         landmarks_v12 <- list(landmarks_v1, landmarks_v2) %>% purrr::discard(nrow_0) %>% do.call(what = "rbind")
       }) %>%
@@ -569,10 +575,10 @@ augment_gazetteer <- function(landmarks,
   #### Parallel landmarks: New Name
   par_landmarks_newname <- list(par_landmarks.rm_begin, 
                                 par_landmarks.rm_end, 
+                                par_landmarks.word_diff,
                                 par_landmarks.word_diff_iftype, 
                                 par_landmarks.rm_begin_iftype, 
-                                par_landmarks.rm_end_iftype, 
-                                par_landmarks.word_diff_iftype) %>%
+                                par_landmarks.rm_end_iftype) %>%
     purrr::discard(is.null) %>% 
     do.call(what = "rbind")
   
@@ -644,12 +650,14 @@ augment_gazetteer <- function(landmarks,
   if(!quiet) print("Separating into General and Specific")
   #aa <<- landmarks
   # TODO: Not sure if needed? As recalc in algorithm?
-  landmarks_out <- extract_dominant_cluster_all(landmarks,
-                                                N_loc_limit = 500,
-                                                collapse_specific_coords = F, # false because recalculate g/s in algorithm
-                                                return_general_landmarks = "all",
-                                                quiet = F)
-
+  #landmarks_out <- extract_dominant_cluster_all(landmarks,
+  #                                              N_loc_limit = 500,
+  #                                              collapse_specific_coords = F, # false because recalculate g/s in algorithm
+  #                                              return_general_landmarks = "all",
+  #                                              quiet = F)
+  landmarks_out <- landmarks
+  landmarks_out$general_specific <- NA
+  
   # ** 7.5 Variables to output -------------------------------------------------
   landmarks_out@data <- landmarks_out@data %>%
     dplyr::select(name, type, general_specific, name_original)

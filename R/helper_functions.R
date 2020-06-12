@@ -385,6 +385,93 @@ restrict_landmarks_by_location <- function(landmark_match,
               landmark_gazetteer = landmark_gazetteer))
 }
 
+
+
+
+
+
+
+
+
+
+
+restrict_gaz_tier1_landmarks <- function(landmark_match,
+                                         landmark_gazetteer){
+  
+  # For each landmark, determines whether it is close to the location of a 
+  # tier 1 landmark (excluding itself). Restrict to close loctions. If no 
+  # locations close, return the original set of locations (no restriction).
+  # Only changes the gazetteer; doesn't eliminate landmarks. In short,
+  # finds where overlap.
+  
+  landmark_gazetteer_gs <- merge(landmark_gazetteer, 
+                                 landmark_match %>% distinct(matched_words_correct_spelling, .keep_all=T), 
+                                 by.x = "name",
+                                 by.y = "matched_words_correct_spelling",
+                                 all.x = F)
+  
+  uids_original <- landmark_gazetteer_gs$uid
+  
+  tier1_locs <- landmark_gazetteer_gs[landmark_gazetteer_gs$prepos_before_crashword_tier_1 %in% T,]
+  
+  if(length(unique(tier1_locs$name)) >= 2){ # doesn't make sense if just 1
+    
+    ## Loop through landmark names
+    lndmrk_gaz_new <- lapply(unique(landmark_gazetteer_gs$name), function(name){
+      ## Restrict to ith landmark
+      landmark_gazetteer_gs_i <- landmark_gazetteer_gs[landmark_gazetteer_gs$name %in% name,]
+      
+      ## From tiered list, remove if same name as ith landmark
+      tier1_locs_i <- tier1_locs[!(tier1_locs$name %in% landmark_gazetteer_gs_i$name),]
+      if(nrow(tier1_locs_i) >= 1){
+        tier1_locs_i <- gBuffer(tier1_locs_i, width = 1000, byid=F)
+        tier1_locs_i$id <- 1
+        
+        landmark_gazetteer_gs_i_cand <- landmark_gazetteer_gs_i[as.vector(gIntersects(landmark_gazetteer_gs_i, tier1_locs_i, byid=T)),]
+        if(nrow(landmark_gazetteer_gs_i_cand) > 0){
+          landmark_gazetteer_gs_i <- landmark_gazetteer_gs_i_cand
+        }
+      }
+      
+      return(landmark_gazetteer_gs_i)
+    }) %>%
+      do.call(what = "rbind")
+    
+    uids_to_remove <- setdiff(uids_original, lndmrk_gaz_new$uid)
+    
+    landmark_gazetteer <- landmark_gazetteer[!(landmark_gazetteer$uid %in% uids_to_remove),]
+    
+  }
+  
+  return(landmark_gazetteer)
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 make_point_small_extent <- function(sdf,
                                     dist_tresh = 500){
   

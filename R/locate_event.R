@@ -376,7 +376,7 @@ locate_event_i <- function(text_i,
   text_i_extract_exact <- text_i %>% 
     str_replace_all(paste0("\\b", paste(event_words, collapse = "|"), "\\b"),
                     "blankwordblankword") # add dummy word to prevent new 
-                                          # word pair from being made
+  # word pair from being made
   
   landmark_match     <- phrase_in_sentence_exact(text_i_extract_exact, 
                                                  landmark_list) 
@@ -765,11 +765,12 @@ locate_event_i <- function(text_i,
     
     landmark_match <- landmark_match[landmark_match$matched_words_correct_spelling %in% locations_in_tweet$matched_words_correct_spelling,]
     
-    # ** 4.4 Restrict by roads and neighborhood --------------------------------
+    # ** 4.4 Restrict by roads, neighborhood and tier 1 landmarks --------------
     if(!quiet) print("Section - 4.4")
     
     landmark_match <- landmark_match[landmark_match$matched_words_correct_spelling %in% locations_in_tweet$matched_words_correct_spelling,]
     
+    #### 1. Prep Shapefiles
     # Do again, after restricting locations (eg, if area and road overlap, choose road -- eg, langata rd)
     road_match     <- locations_in_tweet[locations_in_tweet$location_type %in% "road",]
     area_match     <- locations_in_tweet[locations_in_tweet$location_type %in% "area",]
@@ -788,6 +789,7 @@ locate_event_i <- function(text_i,
       area_match_sp <- NULL
     }
     
+    #### 2. Restrict
     ## Roads
     if(nrow(road_match) > 0 & nrow(landmark_match) > 0){
       land_road_restrict <- restrict_landmarks_by_location(landmark_match,
@@ -806,13 +808,18 @@ locate_event_i <- function(text_i,
       landmark_gazetteer <- area_road_restrict$landmark_gazetteer
     }
     
+    ## Tier 1 Landmarks
+    if(nrow(landmark_match) > 0){
+      landmark_gazetteer <- restrict_gaz_tier1_landmarks(landmark_match,
+                                                         landmark_gazetteer)
+    }
+    
     ## Update locations_in_tweet with new landmark dataframe
     locations_in_tweet <- locations_in_tweet %>%
       filter((location_type %in% "road") | 
                (location_type %in% "area") |
                ((location_type %in% "landmark") & 
                   (matched_words_correct_spelling %in% landmark_match$matched_words_correct_spelling)))
-    
     
     # ** 4.5 Preference specific -----------------------------------------------
     # If name has both general and specific, preference specific; if all general,
@@ -824,7 +831,7 @@ locate_event_i <- function(text_i,
                                           landmark_match)
       
     }
-  
+    
     # ** 4.6 Preference types --------------------------------------------------
     # NOTE: below two steps don't get applies to "always keep list", but OK
     # as steps are integrated later too? Below just accounts for general
