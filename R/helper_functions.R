@@ -1534,12 +1534,12 @@ find_landmark_similar_name_close_to_road <- function(df_out,
                                                      text_i,
                                                      direction = "next_words"){
   
-  df_out <<- df_out
-  roads <<- roads
-  roads_final <<- roads_final
-  landmark_gazetteer <<- landmark_gazetteer
-  crs_distance <<- crs_distance
-  text_i <<- text_i
+  #df_out <<- df_out
+  #roads <<- roads
+  #roads_final <<- roads_final
+  #landmark_gazetteer <<- landmark_gazetteer
+  #crs_distance <<- crs_distance
+  #text_i <<- text_i
   
   null_or_nrow0_returnNULL <- function(x){
     
