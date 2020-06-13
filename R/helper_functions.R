@@ -1531,7 +1531,15 @@ find_landmark_similar_name_close_to_road <- function(df_out,
                                                      roads_final,
                                                      landmark_gazetteer,
                                                      crs_distance,
-                                                     text_i){
+                                                     text_i,
+                                                     direction = "next_words"){
+  
+  df_out <<- df_out
+  roads <<- roads
+  roads_final <<- roads_final
+  landmark_gazetteer <<- landmark_gazetteer
+  crs_distance <<- crs_distance
+  text_i <<- text_i
   
   null_or_nrow0_returnNULL <- function(x){
     
@@ -1576,7 +1584,7 @@ find_landmark_similar_name_close_to_road <- function(df_out,
     #regex_search <- paste0("^", unique(df_out$matched_words_correct_spelling), "\\b") %>% paste(collapse="|")
     regex_search <- paste0("\\b", unique(df_out$matched_words_correct_spelling), "\\b") %>% paste(collapse="|")
     
-    landmark_gazetteer_subset <- landmark_gazetteer[grepl(regex_search,landmark_gazetteer$name),]
+    landmark_gazetteer_subset <- landmark_gazetteer[grepl(regex_search, landmark_gazetteer$name),]
     
     roads_i$id <- 1
     roads_i <- aggregate(roads_i, by="id")
@@ -1595,7 +1603,12 @@ find_landmark_similar_name_close_to_road <- function(df_out,
     if(nrow(landmark_gazetteer_subset) > 0){
       text_words <- text_i %>% words()
       
-      next_word_i <- df_out$word_loc_max[1] + 1
+      if(direction %in% "next_words"){
+        next_word_i <- df_out$word_loc_max[1] + 1
+      } else{
+        next_word_i <- df_out$word_loc_max[1] - 1
+      }
+      
       next_word <- text_words[next_word_i]
       next_word_regex <- paste0("\\b", next_word, "\\b")
       
@@ -1604,7 +1617,13 @@ find_landmark_similar_name_close_to_road <- function(df_out,
         landmark_gazetteer_subset_TEMP <- landmark_gazetteer_subset[grepl(next_word_regex,landmark_gazetteer_subset$name),]
         if(nrow(landmark_gazetteer_subset_TEMP) >= 1) landmark_gazetteer_subset <- landmark_gazetteer_subset_TEMP
         
-        next_word_i <- next_word_i + 1
+        
+        if(direction %in% "next_words"){
+          next_word_i <- next_word_i + 1
+        } else{
+          next_word_i <- next_word_i - 1
+        }
+        
         next_word <- text_words[next_word_i]
         next_word_regex <- paste0("\\b", next_word, "\\b")
       } 
@@ -1623,10 +1642,12 @@ find_landmark_similar_name_close_to_road <- function(df_out,
         regex_search_startstring <- paste0("^", unique(df_out$matched_words_correct_spelling), "\\b") %>% paste(collapse="|")
         landmark_gazetteer_subset <- landmark_gazetteer_subset[grepl(regex_search_startstring, landmark_gazetteer_subset$name),]
         
-        dom_cluster <- extract_dominant_cluster(landmark_gazetteer_subset,
-                                                collapse_specific_coords = T,
-                                                return_general_landmarks = "none")
-        dom_cluster <- null_or_nrow0_returnNULL(dom_cluster) # TODO: check so can remove
+        if(nrow(landmark_gazetteer_subset) > 0){
+          dom_cluster <- extract_dominant_cluster(landmark_gazetteer_subset,
+                                                  collapse_specific_coords = T,
+                                                  return_general_landmarks = "none")
+          dom_cluster <- null_or_nrow0_returnNULL(dom_cluster) # TODO: check so can remove
+        }
       }
       
       ## If there is a dominant cluster ...
@@ -1692,7 +1713,8 @@ determine_location_from_landmark <- function(df_out,
   
   if(length(unique(df_out$matched_words_correct_spelling)) > 1) df_out <- choose_between_multiple_landmarks(df_out, roads, roads_final, crs_distance)
   if(nrow(df_out) > 1) df_out <- choose_between_landmark_same_name(df_out, roads, roads_final, type_list, crs_distance)
-  if(nrow(roads_final) %in% 1) df_out <- find_landmark_similar_name_close_to_road(df_out, roads, roads_final, landmark_gazetteer, crs_distance, text_i)
+  if(nrow(roads_final) %in% 1) df_out <- find_landmark_similar_name_close_to_road(df_out, roads, roads_final, landmark_gazetteer, crs_distance, text_i, direction = "next_words")
+  if(nrow(roads_final) %in% 1) df_out <- find_landmark_similar_name_close_to_road(df_out, roads, roads_final, landmark_gazetteer, crs_distance, text_i, direction = "previous_words")
   if(nrow(roads_final) %in% 1) df_out <- snap_landmark_to_road(df_out, roads, roads_final, crs_distance)
   
   df_out$type <- "landmark"
