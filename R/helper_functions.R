@@ -284,8 +284,9 @@ extract_dominant_cluster <- function(sdf,
       close_thresh_km_closeTF <- sdf_dist_mat <= close_thresh_km
       in_dominant_cluster <- (colSums(close_thresh_km_closeTF) / nrow(close_thresh_km_closeTF) >= cluster_thresh)
       
-      if(return_general_landmarks %in% c("none", "only_if_all_general")){
+      if(return_general_landmarks %in% c("none", "only_if_all_general")){ 
         sdf <- sdf[in_dominant_cluster,]
+        sdf$general_specific <- "specific"
       }
       
       if(return_general_landmarks %in% "all"){
@@ -1532,6 +1533,16 @@ find_landmark_similar_name_close_to_road <- function(df_out,
                                                      crs_distance,
                                                      text_i){
   
+  null_or_nrow0_returnNULL <- function(x){
+    
+    out <- x
+    if(!is.null(x)){
+      if(nrow(x) %in% 0) out <- NULL
+    }
+    
+    return(out)
+  }
+  
   # Find other landmarks with similar name as landmarks in df_out that might
   # be near the road. Here, we start with the landmark names in df_out. If
   # they are far (more than 500 meters) from the mentioned road, this might
@@ -1602,6 +1613,7 @@ find_landmark_similar_name_close_to_road <- function(df_out,
       dom_cluster <- extract_dominant_cluster(landmark_gazetteer_subset,
                                               collapse_specific_coords = T,
                                               return_general_landmarks = "none")
+      dom_cluster <- null_or_nrow0_returnNULL(dom_cluster) # TODO: check so can remove
       
       # If not, restrict to where START with name....
       
@@ -1614,6 +1626,7 @@ find_landmark_similar_name_close_to_road <- function(df_out,
         dom_cluster <- extract_dominant_cluster(landmark_gazetteer_subset,
                                                 collapse_specific_coords = T,
                                                 return_general_landmarks = "none")
+        dom_cluster <- null_or_nrow0_returnNULL(dom_cluster) # TODO: check so can remove
       }
       
       ## If there is a dominant cluster ...
