@@ -1531,6 +1531,7 @@ find_landmark_similar_name_close_to_road <- function(df_out,
                                                      landmark_gazetteer,
                                                      crs_distance,
                                                      text_i){
+  
   # Find other landmarks with similar name as landmarks in df_out that might
   # be near the road. Here, we start with the landmark names in df_out. If
   # they are far (more than 500 meters) from the mentioned road, this might
@@ -1580,73 +1581,75 @@ find_landmark_similar_name_close_to_road <- function(df_out,
     #regex_search_startstring <- paste0("^", unique(df_out$matched_words_correct_spelling), "\\b") %>% paste(collapse="|")
     
     #### NEW
-    text_words <- text_i %>% words()
-    
-    next_word_i <- df_out$word_loc_max[1] + 1
-    next_word <- text_words[next_word_i]
-    next_word_regex <- paste0("\\b", next_word, "\\b")
-    
-    landmark_gazetteer_subset_TEMP <- landmark_gazetteer_subset # initialize for while loop
-    while((nrow(landmark_gazetteer_subset_TEMP) >= 1) & !is.na(next_word)){
-      landmark_gazetteer_subset_TEMP <- landmark_gazetteer_subset[grepl(next_word_regex,landmark_gazetteer_subset$name),]
-      if(nrow(landmark_gazetteer_subset_TEMP) >= 1) landmark_gazetteer_subset <- landmark_gazetteer_subset_TEMP
+    if(nrow(landmark_gazetteer_subset) > 0){
+      text_words <- text_i %>% words()
       
-      next_word_i <- next_word_i + 1
+      next_word_i <- df_out$word_loc_max[1] + 1
       next_word <- text_words[next_word_i]
       next_word_regex <- paste0("\\b", next_word, "\\b")
-    } 
-    
-    ## Check for dominant cluster
-    dom_cluster <- extract_dominant_cluster(landmark_gazetteer_subset,
-                                            collapse_specific_coords = T,
-                                            return_general_landmarks = "none")
-    
-    # If not, restrict to where START with name....
-    
-    ## If there is no dominant cluster, restrict to where starts with landmark
-    # name and check again
-    if(is.null(dom_cluster)){
-      regex_search_startstring <- paste0("^", unique(df_out$matched_words_correct_spelling), "\\b") %>% paste(collapse="|")
-      landmark_gazetteer_subset <- landmark_gazetteer_subset[grepl(regex_search_startstring, landmark_gazetteer_subset$name),]
       
+      landmark_gazetteer_subset_TEMP <- landmark_gazetteer_subset # initialize for while loop
+      while((nrow(landmark_gazetteer_subset_TEMP) >= 1) & !is.na(next_word)){
+        landmark_gazetteer_subset_TEMP <- landmark_gazetteer_subset[grepl(next_word_regex,landmark_gazetteer_subset$name),]
+        if(nrow(landmark_gazetteer_subset_TEMP) >= 1) landmark_gazetteer_subset <- landmark_gazetteer_subset_TEMP
+        
+        next_word_i <- next_word_i + 1
+        next_word <- text_words[next_word_i]
+        next_word_regex <- paste0("\\b", next_word, "\\b")
+      } 
+      
+      ## Check for dominant cluster
       dom_cluster <- extract_dominant_cluster(landmark_gazetteer_subset,
                                               collapse_specific_coords = T,
                                               return_general_landmarks = "none")
-    }
-    
-    ## If there is a dominant cluster ...
-    if(!is.null(dom_cluster)){
       
-      coords <- gCentroid(dom_cluster)
+      # If not, restrict to where START with name....
       
-      df_out$lat <- coordinates(coords)[[2]]
-      df_out$lon <- coordinates(coords)[[1]]
-      df_out$matched_words_correct_spelling <- paste(c(unique(df_out$matched_words_correct_spelling),unique(landmark_gazetteer_subset$name)), collapse=";")
-      df_out$how_determined_landmark <- paste(df_out$how_determined_landmark, "broadended_landmark_search_found_landmarks_similar_name_near_road", sep=";")
+      ## If there is no dominant cluster, restrict to where starts with landmark
+      # name and check again
+      if(is.null(dom_cluster)){
+        regex_search_startstring <- paste0("^", unique(df_out$matched_words_correct_spelling), "\\b") %>% paste(collapse="|")
+        landmark_gazetteer_subset <- landmark_gazetteer_subset[grepl(regex_search_startstring, landmark_gazetteer_subset$name),]
+        
+        dom_cluster <- extract_dominant_cluster(landmark_gazetteer_subset,
+                                                collapse_specific_coords = T,
+                                                return_general_landmarks = "none")
+      }
       
+      ## If there is a dominant cluster ...
+      if(!is.null(dom_cluster)){
+        
+        coords <- gCentroid(dom_cluster)
+        
+        df_out$lat <- coordinates(coords)[[2]]
+        df_out$lon <- coordinates(coords)[[1]]
+        df_out$matched_words_correct_spelling <- paste(c(unique(df_out$matched_words_correct_spelling),unique(landmark_gazetteer_subset$name)), collapse=";")
+        df_out$how_determined_landmark <- paste(df_out$how_determined_landmark, "broadended_landmark_search_found_landmarks_similar_name_near_road", sep=";")
+        
+      }
     }
     
     #### END NEW
-
+    
     #if(nrow(landmark_gazetteer_subset) >= 1){
     #  landmark_gazetteer_subset <- as.data.frame(landmark_gazetteer_subset)
-      
-      ## Maximum distance between coordinates
+    
+    ## Maximum distance between coordinates
     #  lat_min <- min(landmark_gazetteer_subset$lat)
     #  lat_max <- max(landmark_gazetteer_subset$lat)
     #  lon_min <- min(landmark_gazetteer_subset$lon)
     #  lon_max <- max(landmark_gazetteer_subset$lon)
     #  max_dist <- sqrt((lat_max - lat_min)^2 + (lon_max - lon_min)^2)
-      
-      # SEE IF THERE IS A DOMINANT CLUSTER HERE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! TODO
-      
-      ## If coordinates close
+    
+    # SEE IF THERE IS A DOMINANT CLUSTER HERE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! TODO
+    
+    ## If coordinates close
     #  if(max_dist <= 500){
     #    lat_mean <- mean(landmark_gazetteer_subset$lat)
     #    lon_mean <- mean(landmark_gazetteer_subset$lon)
-        
+    
     #    df_out <- df_out[1,]
-        
+    
     #    df_out$lat <- lat_mean
     #    df_out$lon <- lon_mean
     #    df_out$matched_words_correct_spelling <- paste(c(unique(df_out$matched_words_correct_spelling),unique(landmark_gazetteer_subset$name)), collapse=";")
