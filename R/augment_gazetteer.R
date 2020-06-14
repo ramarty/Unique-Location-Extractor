@@ -26,8 +26,8 @@ library(stringr)
 library(stringi)
 library(rgeos)
 library(hunspell)
-library(spacyr)
-spacy_initialize()
+#library(spacyr) # NEED THESE; UNCOMMENT
+#spacy_initialize()
 
 augment_gazetteer <- function(landmarks,
                               landmarks.name_var = "name",
