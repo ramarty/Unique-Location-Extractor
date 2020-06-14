@@ -182,6 +182,22 @@ locate_event <- function(text,
     as.character %>% 
     tolower
   
+  #### Preposition List
+  # Replace "EVENT_WORD" with words from event_words
+  prepositions_list <- lapply(1:length(prepositions_list), function(i){
+    preps_i <- prepositions_list[[i]]
+    
+    preps_event_i <- preps_i[grepl("EVENT_WORD", preps_i)]
+    preps_noevent_i <- preps_i[!grepl("EVENT_WORD", preps_i)]
+    
+    preps_event_all_i <- lapply(preps_event_i, function(phrase) str_replace_all(phrase, "EVENT_WORD", event_words)) %>%
+      unlist()
+    
+    preps_out_i <- c(preps_event_all_i, preps_noevent_i) %>% as.vector()
+    
+    return(preps_out_i)
+  })
+
   ## Names into lists
   landmark_list <- landmark_gazetteer$name
   roads_list <- roads$name %>% as.character %>% tolower
@@ -1049,6 +1065,8 @@ locate_event_i <- function(text_i,
             type_list,
             crs_distance,
             text_i)
+          
+          # TODO: Here, if multiple, preference [event word] , ... [event word] [other stuff] ... 
           
           loc_searched <- TRUE
         }

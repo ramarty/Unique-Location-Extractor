@@ -1047,7 +1047,7 @@ landmark_road_samename <- function(locations_in_tweet){
 
 extract_intersections <- function(locations_in_tweet,
                                   roads,
-                                  point_dist_thresh = 750, # Bit larger than 500; add 50 in buffer, for ex
+                                  point_dist_thresh = 1000, # Larger than 500; add 50 in buffer, for ex
                                   road_buffer = 50){
   # DESCRIPTION: Finds intersections between roads and returns if points of 
   # intersections are close together (ie, returns nothing if two roads 

@@ -26,6 +26,8 @@ library(stringr)
 library(stringi)
 library(rgeos)
 library(hunspell)
+library(spacyr)
+spacy_initialize()
 
 augment_gazetteer <- function(landmarks,
                               landmarks.name_var = "name",
@@ -53,6 +55,10 @@ augment_gazetteer <- function(landmarks,
                               rm.contains = c("road", "rd"),
                               rm.name_begin = c(stopwords("en"), c("near","at","the", "towards", "near")),
                               rm.name_end = c("highway", "road", "rd", "way", "ave", "avenue", "street", "st"),
+                              pos_rm.all = c("ADJ", "ADP", "ADV", "AUX", "CCONJ", "INTJ", "NUM", "PRON", "SCONJ", "VERB", "X"),
+                              pos_rm.except_type = list(list(pos = c("NOUN", "PROPN"), 
+                                                             type = c("bus", "restaurant", "bank"),
+                                                             name = c("parliament"))),
                               crs_distance,
                               crs_out = "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0",
                               quiet = T){
@@ -660,14 +666,46 @@ augment_gazetteer <- function(landmarks,
   #                                              collapse_specific_coords = F, # false because recalculate g/s in algorithm
   #                                              return_general_landmarks = "all",
   #                                              quiet = F)
-  landmarks_out <- landmarks
-  landmarks_out$general_specific <- NA
+  landmarks$general_specific <- NA
   
-  # ** 7.5 Variables to output -------------------------------------------------
-  landmarks_out@data <- landmarks_out@data %>%
+  # ** 7.5 Remove landmarks based on type of POS -------------------------------
+  landmarks$uid <- 1:nrow(landmarks)
+  
+  ## Restrict to cases where potentially remove
+  landmarks_rm <- landmarks[str_count(landmarks$name, '\\w+') %in% 1,] # one word
+  landmarks_rm <- landmarks_rm[hunspell_check(landmarks_rm$name),] # spelled correctly
+  landmarks_rm <- landmarks_rm[is.na(as.numeric(landmarks_rm$name)),] # is not number (eg, 87)
+  
+  ## Add parts of speech
+  pos_df <- spacy_parse(landmarks_rm$name %>% unique(), tag = TRUE) %>%
+    dplyr::select(token, pos, tag) %>%
+    dplyr::rename(name = token) %>%
+    unique()
+  landmarks_rm <- merge(landmarks_rm, pos_df, by = "name")
+  
+  ## remove uids
+  uid_to_remove <- landmarks_rm$uid[landmarks_rm$pos %in% pos_rm.all]
+  landmarks <- landmarks[!(landmarks$uid %in% uid_to_remove),]
+  
+  ## remove uids except types
+  for(i in 1:length(pos_rm.except_type)){
+    pos_i <- pos_rm.except_type[[i]][[1]] 
+    types_i <- pos_rm.except_type[[i]][[2]] %>% paste(collapse = "|")
+    names_i <- pos_rm.except_type[[i]][[3]] 
+    
+    landmarks_rm_i <- landmarks_rm[landmarks_rm$pos %in% pos_i,]
+    landmarks_rm_i <- landmarks_rm_i[!grepl(types_i, landmarks_rm_i$type),] # TODO: only do if not NULL?
+    landmarks_rm_i <- landmarks_rm_i[!(landmarks_rm_i$name %in% names_i),] # TODO: only do if not NULL?
+    
+    # Remove landmarks
+    landmarks <- landmarks[!(landmarks$uid %in% landmarks_rm_i$uid),]
+  }
+  
+  # ** 7.6 Variables to output -------------------------------------------------
+  landmarks@data <- landmarks@data %>%
     dplyr::select(name, type, general_specific, name_original)
   
-  landmarks_out <- spTransform(landmarks_out, CRS(crs_out))
+  landmarks <- spTransform(landmarks, CRS(crs_out))
   
   # Remove landmarks that would highly raise likelihood of false positives
   #landmarks <- landmarks[!(landmarks$name %in% landmarks_to_remove),]
@@ -683,6 +721,6 @@ augment_gazetteer <- function(landmarks,
   #landmarks$lat[landmarks$name == "jkia"] <- -1.344459 
   #landmarks$lon[landmarks$name == "jkia"] <- 36.902554
   
-  return(landmarks_out)
+  return(landmarks)
 }
 
