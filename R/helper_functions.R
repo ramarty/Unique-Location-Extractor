@@ -1613,6 +1613,12 @@ find_landmark_similar_name_close_to_road <- function(df_out,
       next_word_regex <- paste0("\\b", next_word, "\\b")
       
       landmark_gazetteer_subset_TEMP <- landmark_gazetteer_subset # initialize for while loop
+      
+      landmark_gazetteer_subset_TEMP <<- landmark_gazetteer_subset_TEMP
+      text_words <<- text_words
+      next_word_i <<- next_word_i
+      next_word <<- next_word
+      
       while((nrow(landmark_gazetteer_subset_TEMP) >= 1) & !is.na(next_word)){
         landmark_gazetteer_subset_TEMP <- landmark_gazetteer_subset[grepl(next_word_regex,landmark_gazetteer_subset$name),]
         if(nrow(landmark_gazetteer_subset_TEMP) >= 1) landmark_gazetteer_subset <- landmark_gazetteer_subset_TEMP
@@ -1625,7 +1631,13 @@ find_landmark_similar_name_close_to_road <- function(df_out,
         }
         
         next_word <- text_words[next_word_i]
-        next_word_regex <- paste0("\\b", next_word, "\\b")
+        
+        if(length(next_word) %in% 0 | is.na(next_word)){
+          next_word <- NA
+        } else{
+          next_word_regex <- paste0("\\b", next_word, "\\b")
+        }
+
       } 
       
       ## Check for dominant cluster
