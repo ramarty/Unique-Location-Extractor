@@ -1632,7 +1632,9 @@ find_landmark_similar_name_close_to_road <- function(df_out,
         
         next_word <- text_words[next_word_i]
         
-        if(length(next_word) %in% 0 | is.na(next_word)){
+        if(length(next_word) %in% 0){
+          next_word <- NA
+        } else if (is.na(next_word)){
           next_word <- NA
         } else{
           next_word_regex <- paste0("\\b", next_word, "\\b")
