@@ -66,6 +66,8 @@ leaflet() %>%
              color = "red")
 ```
 
+<script src="https://embed.github.com/view/geojson/ramarty/Unique-Location-Extractor/master/data/ex_output.geojson"></script>
+
 # augment_gazetteer
 
 ## Description
