@@ -245,6 +245,7 @@ locate_event <- function(text,
     str_replace_all("^[0-9][0-9]\\:[0-9][0-9]", "") %>%
     str_replace_all("\\+", " ") %>%
     str_replace_all("[[:punct:]]", "") %>%
+    str_replace_all("\\^", "") %>% # ^ not captured by punct
     str_replace_all("\\bamp\\b", "and") %>%
     str_replace_all("via at.*", "") %>% # remove everything include and after 
     #                                     "via at", which comes at end
