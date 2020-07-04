@@ -1610,6 +1610,7 @@ find_landmark_similar_name_close_to_road <- function(df_out,
       }
       
       next_word <- text_words[next_word_i]
+      if(length(next_word) %in% 0) next_word <- NA # if next_word_i = 0, for ex
       next_word_regex <- paste0("\\b", next_word, "\\b")
       
       landmark_gazetteer_subset_TEMP <- landmark_gazetteer_subset # initialize for while loop
@@ -1744,7 +1745,7 @@ determine_location_from_landmark <- function(df_out,
 
 determine_location_from_intersection <- function(df_out, 
                                                  how_determined_text = ""){
-  
+  # TODO: If two intersections, how do we preference?
   df_out <- df_out %>% as.data.frame()
   
   df_out$matched_words_correct_spelling <- paste(df_out$road_correct_spelling_1, df_out$road_correct_spelling_2, sep=",")

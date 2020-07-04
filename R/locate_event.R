@@ -1113,6 +1113,14 @@ locate_event_i <- function(text_i,
     if(!quiet) print("Section - 7.2.3")
     if((nrow(landmarks_final) > 0) & !loc_searched){
       
+      # df_out <<- landmarks_final
+      # landmark_gazetteer <<- landmark_gazetteer
+      # roads <<- roads
+      # roads_final <<- roads_final
+      # type_list <<- type_list
+      # crs_distance <<- crs_distance
+      # text_i <<- text_i
+
       df_out <- determine_location_from_landmark(
         landmarks_final,
         "landmark_ambiguous_pattern",
