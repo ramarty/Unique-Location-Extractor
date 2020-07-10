@@ -33,7 +33,7 @@ augment_gazetteer <- function(landmarks,
                               landmarks.name_var = "name",
                               landmarks.type_var = "type",
                               close_dist_thresh = 500, # NOT IMPLEMENTED YET
-                              types_rm = c("route", "road", "toilet", "political", "locality", "neighborhood"),
+                              types_rm = c("route", "road", "toilet", "political", "locality", "neighborhood", "area", "section of populated place"),
                               types_rm.except_with_type = c("flyover", "round about", "roundabout"),
                               types_rm.except_with_name = c("flyover", "round about", "roundabout"),
                               grams.min_words = 3,

@@ -577,7 +577,11 @@ locate_event_i <- function(text_i,
   # found as variables in final dataframe.
   locations_in_tweet_original <- locations_in_tweet
   
-  if(nrow(locations_in_tweet[!(locations_in_tweet$location_type %in% "area"),]) > 0){
+  N_check <- locations_in_tweet %>%
+    filter(!(location_type %in% "area")) %>%
+    nrow()
+  
+  if(N_check > 0){
     
     # ** 4.-1 If road small, make landmark -------------------------------------
     # TODO: Could do this when building aug gaz?
