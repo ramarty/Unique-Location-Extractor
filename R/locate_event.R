@@ -584,9 +584,11 @@ locate_event_i <- function(text_i,
   if(N_check > 0){
     
     # ** 4.-1 If road small, make landmark -------------------------------------
+    if(!quiet) print("Section - 4.-.1")
     # TODO: Could do this when building aug gaz?
     roads_match <- locations_in_tweet[locations_in_tweet$location_type %in% "road",]
     
+    #roads_match <<- roads_match
     if(nrow(roads_match) > 0){
       
       roads_match_sp <- roads[roads$name %in% roads_match$matched_words_correct_spelling,]
@@ -617,10 +619,19 @@ locate_event_i <- function(text_i,
         purrr::discard(is.null) %>%
         do.call(what="rbind")
       
+
+      road_points <<- road_points
+      landmark_gazetteer <<- landmark_gazetteer
+      stop("abc")
+      
       if(!is.null(road_points)){
         
         #### Add to gazetteer
         road_points$uid <- max(landmark_gazetteer$uid) + 1:nrow(road_points)
+        
+        landmark_gazetteer@data <- landmark_gazetteer@data %>%
+          dplyr::select(uid, name, name_original, type, general_specific)
+        
         landmark_gazetteer <- list(landmark_gazetteer, road_points) %>% do.call(what = "rbind")
         
         #### Switch type from "road" to "landmark"
@@ -629,12 +640,6 @@ locate_event_i <- function(text_i,
         locations_in_tweet$location_type[locations_in_tweet$matched_words_correct_spelling %in%
                                            road_points$name] <- "landmark"
         
-        
-        #roads_match_landmark <- roads_match[roads_match$matched_words_correct_spelling %in% road_points$name,]
-        #roads_match_landmark$location_type <- "landmark"
-        
-        #locations_in_tweet <- bind_rows(locations_in_tweet, 
-        #                                roads_match_landmark)
         
       }
     }
