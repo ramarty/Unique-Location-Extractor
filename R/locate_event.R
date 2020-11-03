@@ -783,7 +783,12 @@ locate_event_i <- function(text_i,
     #type_list <<- type_list
     #print("aa")
     #stop()
+
     if(!is.null(type_list) & nrow(landmark_match) > 0){
+      # landmark_match <<- landmark_match
+      # landmark_gazetteer <<- landmark_gazetteer
+      # type_list <<- type_list
+
       landmark_gazetteer <- remove_gaz_by_type(landmark_match,
                                                landmark_gazetteer,
                                                type_list)
