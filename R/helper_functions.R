@@ -841,11 +841,7 @@ remove_gaz_by_type <- function(landmark_match,
       
       gaz_i <- extract_dominant_cluster(gaz_type_i,
                                         return_general_landmarks = "all")
-    } else{
-      # TODO: check if should be specific here
-      gaz_i$general_specific <- "specific"
-    }
-    
+    } 
     return(gaz_i)
   }) %>%
     do.call(what = "rbind")
@@ -855,7 +851,6 @@ remove_gaz_by_type <- function(landmark_match,
   landmark_gazetteer_rm <- landmark_gazetteer[!(landmark_gazetteer$name %in% landmark_match$matched_words_correct_spelling),]
   
   # Add new
-  if(is.null(landmark_gazetteer$general_specific)) landmark_gazetteer$general_specific <- "specific"
   landmark_gazetteer <- list(landmark_gazetteer, gaz_to_add) %>% do.call(what = "rbind")
   
   return(landmark_gazetteer)
