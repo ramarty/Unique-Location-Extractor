@@ -438,15 +438,15 @@ locate_event_i <- function(text_i,
     #       hunspell things incorrectly spelled?
     landmark_match_fuzzy <- landmark_match_fuzzy %>%
       #filter(!(str_count(matched_words_tweet_spelling, "\\S+") %in% 1)) %>% # tweet: tajmall; correct: taj mall
-      filter(!hunspell_check(matched_words_tweet_spelling))
+      dplyr::filter(!hunspell_check(matched_words_tweet_spelling))
     
     road_match_fuzzy <- road_match_fuzzy %>%
       #filter(!(str_count(matched_words_tweet_spelling, "\\S+") %in% 1)) %>%
-      filter(!hunspell_check(matched_words_tweet_spelling))
+      dplyr::filter(!hunspell_check(matched_words_tweet_spelling))
     
     area_match_fuzzy <- area_match_fuzzy %>%
       #filter(!(str_count(matched_words_tweet_spelling, "\\S+") %in% 1)) %>%
-      filter(!hunspell_check(matched_words_tweet_spelling))
+      dplyr::filter(!hunspell_check(matched_words_tweet_spelling))
     
     #### Add fuzzy match to full match list
     # Starting with exact match ensures, if both exact and fuzzy, only
@@ -511,7 +511,7 @@ locate_event_i <- function(text_i,
   
   ## Update locations_in_tweet with new landmark dataframe
   locations_in_tweet <- locations_in_tweet %>%
-    filter((location_type %in% "road") | 
+    dplyr::filter((location_type %in% "road") | 
              (location_type %in% "area") |
              ((location_type %in% "landmark") & 
                 (matched_words_correct_spelling %in% landmark_match$matched_words_correct_spelling)))
@@ -530,7 +530,7 @@ locate_event_i <- function(text_i,
                          phrase_locate, 
                          text_i_no_stopwords) %>% 
     bind_rows %>%
-    filter(!(word_loc_max %in% c(-Inf, Inf))) #TODO Check why getting Inf using `phrase_locate()` function
+    dplyr::filter(!(word_loc_max %in% c(-Inf, Inf))) #TODO Check why getting Inf using `phrase_locate()` function
   
   prep_locs <- prep_locs_df$word_loc_max %>% unique # vector of locations of prepositions in tweet
   
@@ -558,7 +558,7 @@ locate_event_i <- function(text_i,
              location_type = "landmark") %>%
       
       ## Remove if landmark already found
-      filter(!(matched_words_tweet_spelling %in% locations_in_tweet$matched_words_tweet_spelling))
+      dplyr::filter(!(matched_words_tweet_spelling %in% locations_in_tweet$matched_words_tweet_spelling))
     
     ## Add to main locations dataframe
     locations_in_tweet <- bind_rows(locations_in_tweet, locations_in_tweet_prep)
@@ -578,7 +578,7 @@ locate_event_i <- function(text_i,
   locations_in_tweet_original <- locations_in_tweet
   
   N_check <- locations_in_tweet %>%
-    filter(!(location_type %in% "area")) %>%
+    dplyr::filter(!(location_type %in% "area")) %>%
     nrow()
   
   if(N_check > 0){
@@ -847,7 +847,7 @@ locate_event_i <- function(text_i,
     
     ## Update locations_in_tweet with new landmark dataframe
     locations_in_tweet <- locations_in_tweet %>%
-      filter((location_type %in% "road") | 
+      dplyr::filter((location_type %in% "road") | 
                (location_type %in% "area") |
                ((location_type %in% "landmark") & 
                   (matched_words_correct_spelling %in% landmark_match$matched_words_correct_spelling)))
@@ -934,7 +934,7 @@ locate_event_i <- function(text_i,
     ## Update locations_in_tweet with new landmark dataframe
     # Keep all roads
     locations_in_tweet <- locations_in_tweet %>%
-      filter((location_type %in% "road") | 
+      dplyr::filter((location_type %in% "road") | 
                (location_type %in% "area") |
                ((location_type %in% "landmark") & 
                   (matched_words_correct_spelling %in% landmark_match$matched_words_correct_spelling)))
