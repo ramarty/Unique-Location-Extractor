@@ -619,11 +619,6 @@ locate_event_i <- function(text_i,
         purrr::discard(is.null) %>%
         do.call(what="rbind")
       
-
-      road_points <<- road_points
-      landmark_gazetteer <<- landmark_gazetteer
-      stop("abc")
-      
       if(!is.null(road_points)){
         
         #### Add to gazetteer
