@@ -721,6 +721,10 @@ phrase_locate <- function(phrase, sentence){
     phrase_location_df <- data.frame(NULL)
   }
   
+  if(nrow(phrase_location_df) %in% 0){
+    phrase_location_df <- data.frame(word_loc_max = integer())
+  }
+  
   return(phrase_location_df)
 }
 

@@ -197,7 +197,7 @@ locate_event <- function(text,
     
     return(preps_out_i)
   })
-
+  
   ## Names into lists
   landmark_list <- landmark_gazetteer$name
   roads_list <- roads$name %>% as.character %>% tolower
@@ -520,9 +520,9 @@ locate_event_i <- function(text_i,
   ## Update locations_in_tweet with new landmark dataframe
   locations_in_tweet <- locations_in_tweet %>%
     dplyr::filter((location_type %in% "road") | 
-             (location_type %in% "area") |
-             ((location_type %in% "landmark") & 
-                (matched_words_correct_spelling %in% landmark_match$matched_words_correct_spelling)))
+                    (location_type %in% "area") |
+                    ((location_type %in% "landmark") & 
+                       (matched_words_correct_spelling %in% landmark_match$matched_words_correct_spelling)))
   
   # ** 2.2 Preposition Locations --------------------------------------------------
   if(!quiet) print("Section - 2.2")
@@ -534,13 +534,19 @@ locate_event_i <- function(text_i,
   preps_in_tweet <- phrase_in_sentence_exact(text_i_no_stopwords, prepositions_all)
   
   ## Locations of Prepositions
-  prep_locs_df <- lapply(as.character(preps_in_tweet$matched_words_tweet_spelling), 
-                         phrase_locate, 
-                         text_i_no_stopwords) %>% 
-    bind_rows %>%
-    dplyr::filter(!(word_loc_max %in% c(-Inf, Inf))) #TODO Check why getting Inf using `phrase_locate()` function
+  if(length(as.character(preps_in_tweet$matched_words_tweet_spelling)) %in% 0){
+    prep_locs <- NULL
+  } else{
+    prep_locs_df <- lapply(as.character(preps_in_tweet$matched_words_tweet_spelling), 
+                           phrase_locate, 
+                           text_i_no_stopwords) %>% 
+      bind_rows %>%
+      dplyr::filter(!(word_loc_max %in% c(-Inf, Inf))) #TODO Check why getting Inf using `phrase_locate()` function
+    
+    prep_locs <- prep_locs_df$word_loc_max %>% unique # vector of locations of prepositions in tweet
+    
+  }
   
-  prep_locs <- prep_locs_df$word_loc_max %>% unique # vector of locations of prepositions in tweet
   
   # ** 2.3 Extract landmarks ------------------------------------------------------
   if(!quiet) print("Section - 2.3")
@@ -791,12 +797,12 @@ locate_event_i <- function(text_i,
     #type_list <<- type_list
     #print("aa")
     #stop()
-
+    
     if(!is.null(type_list) & nrow(landmark_match) > 0){
       # landmark_match <<- landmark_match
       # landmark_gazetteer <<- landmark_gazetteer
       # type_list <<- type_list
-
+      
       landmark_gazetteer <- remove_gaz_by_type(landmark_match,
                                                landmark_gazetteer,
                                                type_list)
@@ -856,9 +862,9 @@ locate_event_i <- function(text_i,
     ## Update locations_in_tweet with new landmark dataframe
     locations_in_tweet <- locations_in_tweet %>%
       dplyr::filter((location_type %in% "road") | 
-               (location_type %in% "area") |
-               ((location_type %in% "landmark") & 
-                  (matched_words_correct_spelling %in% landmark_match$matched_words_correct_spelling)))
+                      (location_type %in% "area") |
+                      ((location_type %in% "landmark") & 
+                         (matched_words_correct_spelling %in% landmark_match$matched_words_correct_spelling)))
     
     
     # ** 4.5 Restrict Gazetteer ------------------------------------------------
@@ -886,9 +892,9 @@ locate_event_i <- function(text_i,
       #leaflet() %>% addTiles() %>% addCircles(data=a)
       
     }
-
+    
     # ** 4.5 Preference specific -----------------------------------------------
-
+    
     #if(!quiet) print("Section - 4.5")
     
     #if(nrow(landmark_match) > 0){
@@ -919,7 +925,7 @@ locate_event_i <- function(text_i,
     #}
     
     # ** 4.5 Preference specific with less strict conditions -------------------
-
+    
     
     #if(!quiet) print("Section - 4.8")
     
@@ -928,7 +934,7 @@ locate_event_i <- function(text_i,
     #                                      landmark_match,
     #                                      cluster_thresh = 0.51)
     #}
-
+    
     # ** 4.8 Remove general landmarks ------------------------------------------
     if(!quiet) print("Section - 4.8")
     
@@ -943,9 +949,9 @@ locate_event_i <- function(text_i,
     # Keep all roads
     locations_in_tweet <- locations_in_tweet %>%
       dplyr::filter((location_type %in% "road") | 
-               (location_type %in% "area") |
-               ((location_type %in% "landmark") & 
-                  (matched_words_correct_spelling %in% landmark_match$matched_words_correct_spelling)))
+                      (location_type %in% "area") |
+                      ((location_type %in% "landmark") & 
+                         (matched_words_correct_spelling %in% landmark_match$matched_words_correct_spelling)))
     
     # ** 4.9 Add always keep back in -------------------------------------------
     if(!quiet) print("Section - 4.9")
@@ -1138,7 +1144,7 @@ locate_event_i <- function(text_i,
       # type_list <<- type_list
       # crs_distance <<- crs_distance
       # text_i <<- text_i
-
+      
       df_out <- determine_location_from_landmark(
         landmarks_final,
         "landmark_ambiguous_pattern",
