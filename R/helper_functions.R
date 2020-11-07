@@ -674,6 +674,13 @@ phrase_in_sentence_fuzzy <- function(text_i,
     bind_rows %>% 
     unique
   
+  if(nrow(df) %in% 0){
+    df <- data.frame(matched_words_tweet_spelling = character(),
+               matched_words_correct_spelling = character(),
+               exact_match = logical(),
+               stringsAsFactors = F)
+  }
+  
   return(df)
 }
 

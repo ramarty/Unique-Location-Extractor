@@ -436,6 +436,14 @@ locate_event_i <- function(text_i,
     # (2) Tweet spelling is correctly spelled
     # TODO: If landmark is two words long and both words spelled correctly,
     #       hunspell things incorrectly spelled?
+    # print(landmark_match_fuzzy)
+    # print(road_match_fuzzy)
+    # print(area_match_fuzzy)
+    # 
+    # landmark_match_fuzzy <<- landmark_match_fuzzy
+    # road_match_fuzzy <<- road_match_fuzzy
+    # area_match_fuzzy <<- area_match_fuzzy
+    
     landmark_match_fuzzy <- landmark_match_fuzzy %>%
       #filter(!(str_count(matched_words_tweet_spelling, "\\S+") %in% 1)) %>% # tweet: tajmall; correct: taj mall
       dplyr::filter(!hunspell_check(matched_words_tweet_spelling))
