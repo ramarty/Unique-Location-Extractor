@@ -20,6 +20,7 @@ library(parallel)
 library(jsonlite)
 library(maptools)
 library(sf)
+library(dplyr)
 
 # locate_event -----------------------------------------------------------------
 locate_event <- function(text,
@@ -472,9 +473,9 @@ locate_event_i <- function(text_i,
   
   #### Dataframe of all locations found in tweet, appending across
   ## Add types
-  landmark_match     <- landmark_match     %>% mutate(location_type = "landmark")
-  road_match         <- road_match         %>% mutate(location_type = "road")
-  area_match         <- area_match %>% mutate(location_type = "area")
+  landmark_match     <- landmark_match     %>% dplyr::mutate(location_type = "landmark")
+  road_match         <- road_match         %>% dplyr::mutate(location_type = "road")
+  area_match         <- area_match %>% dplyr::mutate(location_type = "area")
   
   ## Append
   # Don't append before as there could be cases where a landmark and road has 
@@ -568,7 +569,7 @@ locate_event_i <- function(text_i,
       ## Prep Variables
       dplyr::select(matched_words_tweet_spelling,
                     matched_words_correct_spelling) %>%
-      mutate(exact_match = FALSE,
+      dplyr::mutate(exact_match = FALSE,
              location_type = "landmark") %>%
       
       ## Remove if landmark already found
@@ -1196,7 +1197,7 @@ locate_event_i <- function(text_i,
         # If no dominant cluster  
       } else{
         df_out <- df_out %>%
-          mutate(lon = NA,
+          dplyr::mutate(lon = NA,
                  lat = NA,
                  no_dominant_cluster = T)
       }
@@ -1289,7 +1290,7 @@ locate_event_i <- function(text_i,
     
     df_out$landmarks_all_location <- landmark_gazetteer_orig[landmark_gazetteer_orig$name %in% locations_in_tweet_original$matched_words_tweet_spelling[locations_in_tweet_original$location_type %in% "landmark"],] %>%
       as.data.frame() %>%
-      mutate(location = paste0(name,",",lat,",",lon)) %>%
+      dplyr::mutate(location = paste0(name,",",lat,",",lon)) %>%
       pull(location) %>%
       unique %>%
       paste(collapse=";")
@@ -1310,7 +1311,7 @@ locate_event_i <- function(text_i,
       
       rd_inter_df <- spTransform(road_intersections, CRS(crs_out)) %>%
         as.data.frame() %>%
-        mutate(intersection_all_tweet_spelling = paste0(road_tweet_spelling_1,",", road_tweet_spelling_2),
+        dplyr::mutate(intersection_all_tweet_spelling = paste0(road_tweet_spelling_1,",", road_tweet_spelling_2),
                intersection_all_correct_spelling = paste0(road_correct_spelling_1,",", road_correct_spelling_2),
                intersection_all_location = paste0(intersection_all_correct_spelling, ",",lat,",",lon))
       

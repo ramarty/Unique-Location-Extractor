@@ -71,14 +71,14 @@ extract_dominant_cluster_all <- function(landmarks,
   # between coordinates
   landmarks_df <- landmarks %>% 
     as.data.frame %>%
-    group_by(name) %>%
-    mutate(N_name = n(),
+    dplyr::group_by(name) %>%
+    dplyr::mutate(N_name = n(),
            lat_min = min(lat),
            lat_max = max(lat),
            lon_min = min(lon),
            lon_max = max(lon)) %>%
-    ungroup() %>%
-    mutate(max_dist_km = sqrt((lat_max-lat_min)^2 + (lon_max-lon_min)^2)/1000)
+    dplyr::ungroup() %>%
+    dplyr::mutate(max_dist_km = sqrt((lat_max-lat_min)^2 + (lon_max-lon_min)^2)/1000)
   
   ## Split into dataframes where all the landmarks are close versus far
   landmarks_df_close <- landmarks_df[landmarks_df$max_dist_km <= close_thresh_km,]
@@ -185,7 +185,7 @@ extract_dominant_cluster_all <- function(landmarks,
       # ideally would do summarise then summarise_at, but can't. So mutate, then
       # take the first value in each group
       mutate_at(vars(-lat, -lon, -name), . %>% str_split(";") %>% unlist %>% unique %>% paste(collapse = ";")) %>%
-      mutate(lat = mean(lat),
+      dplyr::mutate(lat = mean(lat),
              lon = mean(lon)) %>%
       summarise_all(. %>% head(1)) %>%
       
@@ -638,7 +638,7 @@ phrase_in_sentence_fuzzy_i <- function(sentence,
     
     # Format
     locations_df <- locations_df %>%
-      mutate(matched_words_tweet_spelling   = matched_words_tweet_spelling %>% as.character(),
+      dplyr::mutate(matched_words_tweet_spelling   = matched_words_tweet_spelling %>% as.character(),
              matched_words_correct_spelling = matched_words_correct_spelling %>% as.character())
     
   } else{
@@ -807,14 +807,14 @@ extract_locations_after_words <- function(word_loc,
       
       landmarks_subset@data <- landmarks_subset@data %>%
         dplyr::rename(matched_words_correct_spelling = name) %>%
-        mutate(exact_match = FALSE,
+        dplyr::mutate(exact_match = FALSE,
                location_type = "landmark")
       
       ## Add tweet spelling
       # max_word_length <- landmarks_subset$matched_words_correct_spelling %>% str_count("\\S+") %>% max()
       
       landmarks_subset@data <- landmarks_subset@data %>%
-        mutate(matched_words_tweet_spelling = word(text,
+        dplyr::mutate(matched_words_tweet_spelling = word(text,
                                                    word_loc + 1,
                                                    word_loc + i - 1))
       
